@@ -19,6 +19,7 @@ const ROLES: { value: UserRole; label: string }[] = [
 const Register = () => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('student');
   const [error, setError] = useState('');
@@ -29,7 +30,11 @@ const Register = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const result = register({ name, phone, password, role });
+    if (!phone && !email) {
+      setError('Please provide at least a phone number or email');
+      return;
+    }
+    const result = register({ name, phone, email, password, role });
     if (result.success) {
       setSuccess(true);
     } else {
@@ -43,7 +48,7 @@ const Register = () => {
         <div className="card-elevated text-center space-y-4 max-w-md w-full">
           <CheckCircle className="w-16 h-16 text-success mx-auto" />
           <h2 className="text-2xl font-display font-bold text-foreground">Account Created Successfully!</h2>
-          <p className="text-muted-foreground">You can now login with your phone number and password.</p>
+          <p className="text-muted-foreground">You can now login with your phone number or email.</p>
           <Button className="btn-hero" onClick={() => navigate('/login')}>Go to Login</Button>
         </div>
       </div>
@@ -72,7 +77,11 @@ const Register = () => {
           </div>
           <div className="space-y-2">
             <Label htmlFor="phone">Phone Number</Label>
-            <Input id="phone" type="tel" placeholder="Enter phone number" value={phone} onChange={e => setPhone(e.target.value)} required />
+            <Input id="phone" type="tel" placeholder="Enter phone number" value={phone} onChange={e => setPhone(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input id="email" type="email" placeholder="Enter email address" value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>

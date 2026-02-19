@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { OutingRequest, Complaint } from '@/types';
-import { getRequests, updateRequest, getComplaints } from '@/lib/storage';
+import { getRequests, updateRequest, getComplaints, addNotification } from '@/lib/storage';
+import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
 import { Shield, LogOut, CheckCircle, XCircle, Clock, FileText, AlertTriangle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,8 @@ const WardenDashboard = () => {
     refreshData();
   }, [user, navigate]);
 
+  if (!user || user.role !== 'warden') return null;
+
   const refreshData = () => {
     setRequests(getRequests());
     setComplaints(getComplaints());
@@ -30,60 +33,68 @@ const WardenDashboard = () => {
   const history = requests.filter(r => r.approvalChain.some(s => s.role === 'warden' && s.status !== 'pending'));
 
   const handleApprove = (id: string) => {
+    let approvedRequest: OutingRequest | null = null;
     updateRequest(id, r => {
       const stepIdx = r.approvalChain.findIndex(s => s.role === 'warden');
       if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: user!.name, timestamp: new Date().toISOString() };
+      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: user.name, timestamp: new Date().toISOString() };
       r.currentApprover = 'completed';
       r.status = 'approved';
+      approvedRequest = { ...r };
       return r;
     });
+
+    // Send notification to student
+    if (approvedRequest) {
+      const req = approvedRequest as OutingRequest;
+      const hasEmail = req.studentEmail && req.studentEmail.trim() !== '';
+      const method = hasEmail ? 'email' : 'sms';
+      const destination = hasEmail ? req.studentEmail : req.studentPhone;
+
+      addNotification({
+        id: crypto.randomUUID(),
+        requestId: req.id,
+        studentId: req.studentId,
+        method,
+        destination,
+        message: `Your ${req.type} pass has been APPROVED! Gatepass for ${new Date(req.outDateTime).toLocaleDateString()} - ${new Date(req.inDateTime).toLocaleDateString()} is ready for download. ${method === 'email' ? 'A copy has been sent to your email.' : 'Check your messages for details.'}`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
+
     refreshData();
   };
 
   const handleDecline = (id: string) => {
     const reason = declineReasons[id] || 'No reason provided';
+    let declinedRequest: OutingRequest | null = null;
     updateRequest(id, r => {
       const stepIdx = r.approvalChain.findIndex(s => s.role === 'warden');
       if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: user!.name, reason, timestamp: new Date().toISOString() };
+      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: user.name, reason, timestamp: new Date().toISOString() };
       r.currentApprover = 'declined';
       r.status = 'declined';
+      declinedRequest = { ...r };
       return r;
     });
+
+    if (declinedRequest) {
+      const req = declinedRequest as OutingRequest;
+      const hasEmail = req.studentEmail && req.studentEmail.trim() !== '';
+      addNotification({
+        id: crypto.randomUUID(),
+        requestId: req.id,
+        studentId: req.studentId,
+        method: hasEmail ? 'email' : 'sms',
+        destination: hasEmail ? req.studentEmail : req.studentPhone,
+        message: `Your ${req.type} pass has been DECLINED. Reason: ${reason}`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
+
     refreshData();
-  };
-
-  const downloadGatepass = (r: OutingRequest) => {
-    const text = `
-=== GATEPASS ===
-SNS Institutions - Hostel Gatepass
-
-Name: ${r.name}
-Reg No: ${r.regNumber}
-Branch: ${r.branch} | Year: ${r.year}
-Institution: ${r.institution}
-Room: ${r.roomNumber}
-Student Phone: ${r.studentPhone}
-Parent Phone: ${r.parentPhone}
-
-Type: ${r.type.toUpperCase()}
-Out: ${new Date(r.outDateTime).toLocaleString()}
-In: ${new Date(r.inDateTime).toLocaleString()}
-Reason: ${r.reason}
-
-Status: APPROVED
-Approved by: ${user?.name}
-Date: ${new Date().toLocaleString()}
-================
-    `.trim();
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gatepass-${r.id.slice(0, 8)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -95,7 +106,7 @@ Date: ${new Date().toLocaleString()}
             <span className="font-display font-bold text-lg">SNS Gatepass</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm opacity-90">{user?.name} (WARDEN)</span>
+            <span className="text-sm opacity-90">{user.name} (WARDEN)</span>
             <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => { logout(); navigate('/'); }}>
               <LogOut className="w-4 h-4 mr-1" /> Logout
             </Button>
@@ -182,8 +193,8 @@ Date: ${new Date().toLocaleString()}
                       <Badge className={r.status === 'approved' ? 'status-approved' : 'status-declined'}>{r.status}</Badge>
                     </div>
                     {r.status === 'approved' && (
-                      <Button size="sm" variant="outline" className="mt-2 gap-1" onClick={() => downloadGatepass(r)}>
-                        <Download className="w-3 h-3" /> Download Gatepass
+                      <Button size="sm" variant="outline" className="mt-2 gap-1" onClick={() => downloadGatepassPDF(r)}>
+                        <Download className="w-3 h-3" /> Download Gatepass PDF
                       </Button>
                     )}
                   </div>

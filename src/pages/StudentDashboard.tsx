@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { OutingRequest, Complaint, INSTITUTIONS, YEARS, getApprovalChain, ApprovalStep } from '@/types';
-import { getRequests, addRequest, getComplaints, addComplaint } from '@/lib/storage';
-import { Shield, LogOut, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { OutingRequest, Complaint, GatepassNotification, INSTITUTIONS, YEARS, getApprovalChain, ApprovalStep } from '@/types';
+import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead } from '@/lib/storage';
+import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
+import { Shield, LogOut, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, Mail, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,20 +18,22 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<OutingRequest[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [notifications, setNotifications] = useState<GatepassNotification[]>([]);
 
   useEffect(() => {
     if (!user || user.role !== 'student') { navigate('/'); return; }
-    setRequests(getRequests().filter(r => r.studentId === user.id));
-    setComplaints(getComplaints().filter(c => c.studentId === user.id));
+    refreshData();
   }, [user, navigate]);
 
   if (!user || user.role !== 'student') return null;
 
   const refreshData = () => {
-    if (!user) return;
     setRequests(getRequests().filter(r => r.studentId === user.id));
     setComplaints(getComplaints().filter(c => c.studentId === user.id));
+    setNotifications(getNotifications(user.id));
   };
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,7 +44,7 @@ const StudentDashboard = () => {
             <span className="font-display font-bold text-lg">SNS Gatepass</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm opacity-90">Welcome, {user?.name}</span>
+            <span className="text-sm opacity-90">Welcome, {user.name}</span>
             <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => { logout(); navigate('/'); }}>
               <LogOut className="w-4 h-4 mr-1" /> Logout
             </Button>
@@ -53,24 +56,33 @@ const StudentDashboard = () => {
         <h1 className="text-3xl font-display font-bold text-foreground mb-6">Student Dashboard</h1>
 
         <Tabs defaultValue="outing" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 max-w-lg">
+          <TabsList className="grid w-full grid-cols-5 max-w-2xl">
             <TabsTrigger value="outing" className="gap-1"><FileText className="w-4 h-4" /> Outing</TabsTrigger>
             <TabsTrigger value="leave" className="gap-1"><ClipboardList className="w-4 h-4" /> Leave</TabsTrigger>
             <TabsTrigger value="complaints" className="gap-1"><AlertTriangle className="w-4 h-4" /> Complaints</TabsTrigger>
             <TabsTrigger value="status" className="gap-1"><Clock className="w-4 h-4" /> Status</TabsTrigger>
+            <TabsTrigger value="notifications" className="gap-1 relative">
+              <Bell className="w-4 h-4" /> Inbox
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center">{unreadCount}</span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="outing">
-            <RequestForm type="outing" user={user!} onSubmit={refreshData} />
+            <RequestForm type="outing" user={user} onSubmit={refreshData} />
           </TabsContent>
           <TabsContent value="leave">
-            <RequestForm type="leave" user={user!} onSubmit={refreshData} />
+            <RequestForm type="leave" user={user} onSubmit={refreshData} />
           </TabsContent>
           <TabsContent value="complaints">
-            <ComplaintForm user={user!} onSubmit={refreshData} />
+            <ComplaintForm user={user} onSubmit={refreshData} />
           </TabsContent>
           <TabsContent value="status">
             <StatusView requests={requests} />
+          </TabsContent>
+          <TabsContent value="notifications">
+            <NotificationsView notifications={notifications} onRefresh={refreshData} />
           </TabsContent>
         </Tabs>
       </main>
@@ -78,7 +90,7 @@ const StudentDashboard = () => {
   );
 };
 
-function RequestForm({ type, user, onSubmit }: { type: 'outing' | 'leave'; user: { id: string; name: string; phone: string }; onSubmit: () => void }) {
+function RequestForm({ type, user, onSubmit }: { type: 'outing' | 'leave'; user: { id: string; name: string; phone: string; email: string }; onSubmit: () => void }) {
   const [form, setForm] = useState({
     year: '' as string,
     branch: '',
@@ -107,6 +119,7 @@ function RequestForm({ type, user, onSubmit }: { type: 'outing' | 'leave'; user:
       year: form.year as OutingRequest['year'],
       branch: form.branch,
       studentPhone: user.phone,
+      studentEmail: user.email,
       institution: form.institution,
       regNumber: form.regNumber,
       parentPhone: form.parentPhone,
@@ -257,38 +270,6 @@ function StatusView({ requests }: { requests: OutingRequest[] }) {
     return <Clock className="w-4 h-4 text-warning" />;
   };
 
-  const downloadGatepass = (r: OutingRequest) => {
-    const text = `
-=== GATEPASS ===
-SNS Institutions - Hostel Gatepass
-
-Name: ${r.name}
-Reg No: ${r.regNumber}
-Branch: ${r.branch}
-Year: ${r.year}
-Institution: ${r.institution}
-Room: ${r.roomNumber}
-Student Phone: ${r.studentPhone}
-Parent Phone: ${r.parentPhone}
-
-Type: ${r.type.toUpperCase()}
-Out: ${new Date(r.outDateTime).toLocaleString()}
-In: ${new Date(r.inDateTime).toLocaleString()}
-Reason: ${r.reason}
-
-Status: APPROVED
-Approved on: ${new Date().toLocaleString()}
-================
-    `.trim();
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `gatepass-${r.id.slice(0, 8)}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   if (requests.length === 0) {
     return (
       <div className="card-elevated text-center py-12 text-muted-foreground">
@@ -326,8 +307,52 @@ Approved on: ${new Date().toLocaleString()}
             ))}
           </div>
           {r.status === 'approved' && (
-            <Button size="sm" className="mt-3 gap-1" variant="outline" onClick={() => downloadGatepass(r)}>
-              <Download className="w-3 h-3" /> Download Gatepass
+            <Button size="sm" className="mt-3 gap-1" variant="outline" onClick={() => downloadGatepassPDF(r)}>
+              <Download className="w-3 h-3" /> Download Gatepass PDF
+            </Button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function NotificationsView({ notifications, onRefresh }: { notifications: GatepassNotification[]; onRefresh: () => void }) {
+  if (notifications.length === 0) {
+    return (
+      <div className="card-elevated text-center py-12 text-muted-foreground">
+        <Bell className="w-12 h-12 mx-auto mb-3 opacity-40" />
+        <p>No notifications yet. You'll receive gatepass delivery notifications here.</p>
+      </div>
+    );
+  }
+
+  const handleMarkRead = (id: string) => {
+    markNotificationRead(id);
+    onRefresh();
+  };
+
+  return (
+    <div className="space-y-4">
+      {notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(n => (
+        <div key={n.id} className={`card-elevated ${!n.read ? 'border-primary/30 bg-primary/5' : ''}`}>
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2">
+              {n.method === 'email' ? <Mail className="w-4 h-4 text-primary" /> : <MessageSquare className="w-4 h-4 text-secondary" />}
+              <span className="text-sm font-semibold text-foreground">
+                {n.method === 'email' ? 'Email Notification' : 'SMS Notification'}
+              </span>
+              {!n.read && <Badge className="status-pending text-xs">New</Badge>}
+            </div>
+            <span className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</span>
+          </div>
+          <p className="text-sm text-muted-foreground mb-1">
+            <strong>To:</strong> {n.destination}
+          </p>
+          <p className="text-sm text-foreground bg-muted p-3 rounded-lg">{n.message}</p>
+          {!n.read && (
+            <Button size="sm" variant="ghost" className="mt-2 text-xs" onClick={() => handleMarkRead(n.id)}>
+              Mark as read
             </Button>
           )}
         </div>
