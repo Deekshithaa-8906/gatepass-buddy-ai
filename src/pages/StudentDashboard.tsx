@@ -24,6 +24,8 @@ const StudentDashboard = () => {
     setComplaints(getComplaints().filter(c => c.studentId === user.id));
   }, [user, navigate]);
 
+  if (!user || user.role !== 'student') return null;
+
   const refreshData = () => {
     if (!user) return;
     setRequests(getRequests().filter(r => r.studentId === user.id));
