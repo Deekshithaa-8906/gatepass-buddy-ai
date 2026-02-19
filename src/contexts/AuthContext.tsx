@@ -3,7 +3,7 @@ import { User, UserRole } from '@/types';
 
 interface AuthContextType {
   user: User | null;
-  login: (phone: string, password: string) => { success: boolean; error?: string };
+  login: (identifier: string, password: string) => { success: boolean; error?: string };
   register: (data: Omit<User, 'id'>) => { success: boolean; error?: string };
   logout: () => void;
 }
@@ -31,10 +31,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (saved) setUser(JSON.parse(saved));
   }, []);
 
-  const login = (phone: string, password: string) => {
+  const login = (identifier: string, password: string) => {
     const users = getUsers();
-    const found = users.find(u => u.phone === phone && u.password === password);
-    if (!found) return { success: false, error: 'Invalid phone number or password' };
+    const found = users.find(
+      u => (u.phone === identifier || u.email === identifier) && u.password === password
+    );
+    if (!found) return { success: false, error: 'Invalid phone/email or password' };
     setUser(found);
     localStorage.setItem('gatepass_current_user', JSON.stringify(found));
     return { success: true };
@@ -44,6 +46,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const users = getUsers();
     if (users.find(u => u.phone === data.phone)) {
       return { success: false, error: 'Phone number already registered' };
+    }
+    if (data.email && users.find(u => u.email === data.email)) {
+      return { success: false, error: 'Email already registered' };
     }
     const newUser: User = { ...data, id: crypto.randomUUID() };
     users.push(newUser);

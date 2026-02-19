@@ -4,6 +4,7 @@ export interface User {
   id: string;
   name: string;
   phone: string;
+  email: string;
   password: string;
   role: UserRole;
 }
@@ -26,6 +27,7 @@ export interface OutingRequest {
   year: '1st' | '2nd' | '3rd' | '4th';
   branch: string;
   studentPhone: string;
+  studentEmail: string;
   institution: string;
   regNumber: string;
   parentPhone: string;
@@ -47,6 +49,17 @@ export interface Complaint {
   text: string;
   createdAt: string;
   resolved: boolean;
+}
+
+export interface GatepassNotification {
+  id: string;
+  requestId: string;
+  studentId: string;
+  method: 'sms' | 'email';
+  destination: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
 }
 
 export const INSTITUTIONS = [

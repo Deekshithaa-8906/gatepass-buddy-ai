@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 const Login = () => {
-  const [phone, setPhone] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const { login } = useAuth();
@@ -16,7 +16,7 @@ const Login = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const result = login(phone, password);
+    const result = login(identifier, password);
     if (result.success) {
       const user = JSON.parse(localStorage.getItem('gatepass_current_user') || '{}');
       const dashMap: Record<string, string> = {
@@ -41,7 +41,7 @@ const Login = () => {
             <span className="text-xl font-display font-bold">SNS Institutions</span>
           </div>
           <h1 className="text-3xl font-display font-bold text-foreground">Login</h1>
-          <p className="text-muted-foreground">Enter your phone number and password</p>
+          <p className="text-muted-foreground">Enter your phone number or email and password</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card-elevated space-y-4">
@@ -51,8 +51,8 @@ const Login = () => {
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone Number</Label>
-            <Input id="phone" type="tel" placeholder="Enter phone number" value={phone} onChange={e => setPhone(e.target.value)} required />
+            <Label htmlFor="identifier">Phone Number or Email</Label>
+            <Input id="identifier" placeholder="Enter phone number or email" value={identifier} onChange={e => setIdentifier(e.target.value)} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>

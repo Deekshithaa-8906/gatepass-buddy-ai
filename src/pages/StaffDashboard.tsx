@@ -5,7 +5,6 @@ import { OutingRequest, UserRole } from '@/types';
 import { getRequests, updateRequest } from '@/lib/storage';
 import { Shield, LogOut, CheckCircle, XCircle, Clock, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -23,20 +22,20 @@ const StaffDashboard = () => {
     refreshRequests();
   }, [user, navigate]);
 
+  if (!user || !staffRoles.includes(user.role)) return null;
+
   const refreshRequests = () => {
-    if (!user) return;
-    const all = getRequests();
-    setRequests(all);
+    setRequests(getRequests());
   };
 
-  const pending = requests.filter(r => r.currentApprover === user?.role && r.status === 'pending');
-  const history = requests.filter(r => r.approvalChain.some(s => s.role === user?.role && s.status !== 'pending'));
+  const pending = requests.filter(r => r.currentApprover === user.role && r.status === 'pending');
+  const history = requests.filter(r => r.approvalChain.some(s => s.role === user.role && s.status !== 'pending'));
 
   const handleApprove = (id: string) => {
     updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === user!.role);
+      const stepIdx = r.approvalChain.findIndex(s => s.role === user.role);
       if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: user!.name, timestamp: new Date().toISOString() };
+      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: user.name, timestamp: new Date().toISOString() };
       const nextStep = r.approvalChain[stepIdx + 1];
       if (nextStep) {
         r.currentApprover = nextStep.role;
@@ -52,9 +51,9 @@ const StaffDashboard = () => {
   const handleDecline = (id: string) => {
     const reason = declineReasons[id] || 'No reason provided';
     updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === user!.role);
+      const stepIdx = r.approvalChain.findIndex(s => s.role === user.role);
       if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: user!.name, reason, timestamp: new Date().toISOString() };
+      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: user.name, reason, timestamp: new Date().toISOString() };
       r.currentApprover = 'declined';
       r.status = 'declined';
       return r;
@@ -71,7 +70,7 @@ const StaffDashboard = () => {
             <span className="font-display font-bold text-lg">SNS Gatepass</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm opacity-90">{user?.name} ({user?.role?.toUpperCase()})</span>
+            <span className="text-sm opacity-90">{user.name} ({user.role.toUpperCase()})</span>
             <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => { logout(); navigate('/'); }}>
               <LogOut className="w-4 h-4 mr-1" /> Logout
             </Button>
@@ -80,7 +79,7 @@ const StaffDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-3xl font-display font-bold text-foreground mb-6 capitalize">{user?.role} Dashboard</h1>
+        <h1 className="text-3xl font-display font-bold text-foreground mb-6 capitalize">{user.role} Dashboard</h1>
 
         <Tabs defaultValue="pending" className="space-y-6">
           <TabsList>
