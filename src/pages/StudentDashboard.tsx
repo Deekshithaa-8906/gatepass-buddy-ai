@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { OutingRequest, Complaint, GatepassNotification, INSTITUTIONS, YEARS, getApprovalChain, ApprovalStep } from '@/types';
 import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead } from '@/lib/storage';
 import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
-import { Shield, LogOut, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, Mail, MessageSquare } from 'lucide-react';
+import { MapPin, LogOut, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, Mail, MessageSquare, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,6 +12,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const classes =
+    status === 'approved' ? 'bg-success/20 text-success border-success/30' :
+    status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    'bg-warning/20 text-warning border-warning/30';
+  return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
+};
 
 const StudentDashboard = () => {
   const { user, logout } = useAuth();
@@ -40,8 +48,8 @@ const StudentDashboard = () => {
       <header className="gradient-hero text-primary-foreground py-4 px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield className="w-6 h-6" />
-            <span className="font-display font-bold text-lg">SNS Gatepass</span>
+            <MapPin className="w-6 h-6" />
+            <span className="font-display font-bold text-lg">PassNTrack</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm opacity-90">Welcome, {user.name}</span>
@@ -53,7 +61,12 @@ const StudentDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-3xl font-display font-bold text-foreground mb-6">Student Dashboard</h1>
+        <div className="flex items-center gap-4 mb-6">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/')}>
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Button>
+          <h1 className="text-3xl font-display font-bold text-foreground">Student Dashboard</h1>
+        </div>
 
         <Tabs defaultValue="outing" className="space-y-6">
           <TabsList className="grid w-full grid-cols-5 max-w-2xl">
@@ -139,14 +152,17 @@ function RequestForm({ type, user, onSubmit }: { type: 'outing' | 'leave'; user:
     setForm({ year: '', branch: '', institution: '', regNumber: '', parentPhone: '', roomNumber: '', outDateTime: '', inDateTime: '', reason: '' });
   };
 
+  const passTitle = type === 'outing' ? 'Outing Pass Request' : 'Leave Pass Request';
+  const reasonLabel = type === 'outing' ? 'Reason for Going Out' : 'Reason for Leave';
+  const outLabel = type === 'outing' ? 'Out Date & Time' : 'From Date & Time';
+  const inLabel = type === 'outing' ? 'In Date & Time' : 'To Date & Time';
+
   return (
     <div className="card-elevated max-w-2xl">
-      <h2 className="text-xl font-display font-bold text-foreground mb-4">
-        {type === 'outing' ? 'Outing Pass Request' : 'Leave Pass Request'}
-      </h2>
+      <h2 className="text-xl font-display font-bold text-foreground mb-4">{passTitle}</h2>
       {submitted && (
-        <div className="status-approved p-3 rounded-lg mb-4 text-sm flex items-center gap-2">
-          <CheckCircle className="w-4 h-4" /> Request submitted successfully!
+        <div className="bg-success/20 text-success border border-success/30 p-3 rounded-lg mb-4 text-sm flex items-center gap-2">
+          <CheckCircle className="w-4 h-4" /> Request submitted successfully! PassNTrack will notify you on approval.
         </div>
       )}
       <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -189,15 +205,15 @@ function RequestForm({ type, user, onSubmit }: { type: 'outing' | 'leave'; user:
           <Input placeholder="e.g. A-201" value={form.roomNumber} onChange={e => update('roomNumber', e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label>Out Date & Time</Label>
+          <Label>{outLabel}</Label>
           <Input type="datetime-local" value={form.outDateTime} onChange={e => update('outDateTime', e.target.value)} required />
         </div>
         <div className="space-y-1">
-          <Label>In Date & Time</Label>
+          <Label>{inLabel}</Label>
           <Input type="datetime-local" value={form.inDateTime} onChange={e => update('inDateTime', e.target.value)} required />
         </div>
         <div className="sm:col-span-2 space-y-1">
-          <Label>Reason for {type === 'outing' ? 'Going Out' : 'Leave'}</Label>
+          <Label>{reasonLabel}</Label>
           <Textarea placeholder="Enter reason..." value={form.reason} onChange={e => update('reason', e.target.value)} required />
         </div>
         {form.year && (
@@ -240,8 +256,8 @@ function ComplaintForm({ user, onSubmit }: { user: { id: string; name: string };
     <div className="card-elevated max-w-2xl">
       <h2 className="text-xl font-display font-bold text-foreground mb-4">Submit Complaint</h2>
       {submitted && (
-        <div className="status-approved p-3 rounded-lg mb-4 text-sm flex items-center gap-2">
-          <CheckCircle className="w-4 h-4" /> Complaint submitted!
+        <div className="bg-success/20 text-success border border-success/30 p-3 rounded-lg mb-4 text-sm flex items-center gap-2">
+          <CheckCircle className="w-4 h-4" /> Complaint submitted to PassNTrack!
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -288,9 +304,7 @@ function StatusView({ requests }: { requests: OutingRequest[] }) {
               <h3 className="font-semibold text-foreground">{r.type === 'outing' ? 'Outing' : 'Leave'} Pass</h3>
               <p className="text-sm text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</p>
             </div>
-            <Badge className={r.status === 'approved' ? 'status-approved' : r.status === 'declined' ? 'status-declined' : 'status-pending'}>
-              {r.status}
-            </Badge>
+            <StatusBadge status={r.status} />
           </div>
           <div className="text-sm text-muted-foreground mb-3">
             <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()} → <strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
@@ -308,7 +322,7 @@ function StatusView({ requests }: { requests: OutingRequest[] }) {
           </div>
           {r.status === 'approved' && (
             <Button size="sm" className="mt-3 gap-1" variant="outline" onClick={() => downloadGatepassPDF(r)}>
-              <Download className="w-3 h-3" /> Download Gatepass PDF
+              <Download className="w-3 h-3" /> Download {r.type === 'leave' ? 'Leave Pass' : 'Gatepass'} PDF
             </Button>
           )}
         </div>
@@ -322,7 +336,7 @@ function NotificationsView({ notifications, onRefresh }: { notifications: Gatepa
     return (
       <div className="card-elevated text-center py-12 text-muted-foreground">
         <Bell className="w-12 h-12 mx-auto mb-3 opacity-40" />
-        <p>No notifications yet. You'll receive gatepass delivery notifications here.</p>
+        <p>No notifications yet. PassNTrack will notify you when your requests are actioned.</p>
       </div>
     );
   }
@@ -340,9 +354,9 @@ function NotificationsView({ notifications, onRefresh }: { notifications: Gatepa
             <div className="flex items-center gap-2">
               {n.method === 'email' ? <Mail className="w-4 h-4 text-primary" /> : <MessageSquare className="w-4 h-4 text-secondary" />}
               <span className="text-sm font-semibold text-foreground">
-                {n.method === 'email' ? 'Email Notification' : 'SMS Notification'}
+                {n.method === 'email' ? 'Email Notification' : 'SMS Notification'} — PassNTrack
               </span>
-              {!n.read && <Badge className="status-pending text-xs">New</Badge>}
+              {!n.read && <Badge className="bg-warning/20 text-warning border border-warning/30 text-xs">New</Badge>}
             </div>
             <span className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</span>
           </div>

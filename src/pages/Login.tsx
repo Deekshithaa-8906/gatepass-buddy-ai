@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Shield, LogIn } from 'lucide-react';
+import { MapPin, LogIn, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,10 +35,13 @@ const Login = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-background">
       <div className="w-full max-w-md space-y-6">
+        <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" onClick={() => navigate('/')}>
+          <ArrowLeft className="w-4 h-4" /> Back to Home
+        </Button>
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 text-primary">
-            <Shield className="w-8 h-8" />
-            <span className="text-xl font-display font-bold">SNS Institutions</span>
+            <MapPin className="w-8 h-8" />
+            <span className="text-xl font-display font-bold">PassNTrack</span>
           </div>
           <h1 className="text-3xl font-display font-bold text-foreground">Login</h1>
           <p className="text-muted-foreground">Enter your phone number or email and password</p>

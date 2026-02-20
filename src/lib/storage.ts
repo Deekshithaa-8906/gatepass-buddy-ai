@@ -37,6 +37,16 @@ export function addComplaint(complaint: Complaint) {
   localStorage.setItem(COMPLAINTS_KEY, JSON.stringify(all));
 }
 
+export function resolveComplaint(id: string) {
+  const all = getComplaints();
+  const idx = all.findIndex(c => c.id === id);
+  if (idx !== -1) {
+    all[idx].resolved = true;
+    all[idx].resolvedAt = new Date().toISOString();
+    localStorage.setItem(COMPLAINTS_KEY, JSON.stringify(all));
+  }
+}
+
 export function getNotifications(studentId: string): GatepassNotification[] {
   const all: GatepassNotification[] = JSON.parse(localStorage.getItem(NOTIFICATIONS_KEY) || '[]');
   return all.filter(n => n.studentId === studentId);

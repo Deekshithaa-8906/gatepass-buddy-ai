@@ -4,20 +4,22 @@ import { OutingRequest } from '@/types';
 export function generateGatepassPDF(request: OutingRequest): jsPDF {
   const doc = new jsPDF();
   const w = doc.internal.pageSize.getWidth();
+  const passLabel = request.type === 'leave' ? 'Official Leave Pass' : 'Official Gatepass';
 
   // Header
   doc.setFillColor(30, 58, 95);
-  doc.rect(0, 0, w, 40, 'F');
+  doc.rect(0, 0, w, 45, 'F');
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
+  doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text('SNS Institutions', w / 2, 18, { align: 'center' });
-  doc.setFontSize(14);
-  doc.text('Hostel Gatepass', w / 2, 30, { align: 'center' });
+  doc.text('PassNTrack', w / 2, 18, { align: 'center' });
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`PassNTrack – ${passLabel}`, w / 2, 32, { align: 'center' });
 
   // Body
   doc.setTextColor(30, 30, 30);
-  let y = 55;
+  let y = 58;
   const left = 20;
 
   doc.setFontSize(16);
@@ -54,11 +56,27 @@ export function generateGatepassPDF(request: OutingRequest): jsPDF {
     y += lines.length * 6 + 4;
   }
 
+  // Approval chain
+  y += 5;
+  doc.setDrawColor(200, 200, 200);
+  doc.line(left, y, w - left, y);
+  y += 10;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Approval Chain:', left, y);
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  for (const step of request.approvalChain) {
+    const stepLabel = `${step.role.toUpperCase()}: ${step.status.toUpperCase()}${step.approvedBy ? ` (by ${step.approvedBy})` : ''}${step.timestamp ? ` — ${new Date(step.timestamp).toLocaleString()}` : ''}`;
+    doc.text(stepLabel, left + 5, y);
+    y += 7;
+  }
+
   y += 5;
   doc.line(left, y, w - left, y);
   y += 12;
 
-  // Approval Status
+  // Status
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(34, 139, 34);
@@ -68,19 +86,20 @@ export function generateGatepassPDF(request: OutingRequest): jsPDF {
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generated on: ${new Date().toLocaleString()}`, w / 2, y, { align: 'center' });
+  doc.text(`Generated on: ${new Date().toLocaleString()} by PassNTrack`, w / 2, y, { align: 'center' });
 
   // Footer
   doc.setFillColor(30, 58, 95);
   doc.rect(0, doc.internal.pageSize.getHeight() - 15, w, 15, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(8);
-  doc.text('© SNS Institutions - Hostel Gatepass Management System', w / 2, doc.internal.pageSize.getHeight() - 5, { align: 'center' });
+  doc.text('© PassNTrack – Hostel Gatepass Management System', w / 2, doc.internal.pageSize.getHeight() - 5, { align: 'center' });
 
   return doc;
 }
 
 export function downloadGatepassPDF(request: OutingRequest) {
   const doc = generateGatepassPDF(request);
-  doc.save(`gatepass-${request.id.slice(0, 8)}.pdf`);
+  const prefix = request.type === 'leave' ? 'leavepass' : 'gatepass';
+  doc.save(`${prefix}-${request.id.slice(0, 8)}.pdf`);
 }
