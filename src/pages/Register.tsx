@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserRole } from '@/types';
-import { Shield, UserPlus, CheckCircle } from 'lucide-react';
+import { MapPin, UserPlus, CheckCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,7 +48,7 @@ const Register = () => {
         <div className="card-elevated text-center space-y-4 max-w-md w-full">
           <CheckCircle className="w-16 h-16 text-success mx-auto" />
           <h2 className="text-2xl font-display font-bold text-foreground">Account Created Successfully!</h2>
-          <p className="text-muted-foreground">You can now login with your phone number or email.</p>
+          <p className="text-muted-foreground">You can now login with your phone number or email on <strong>PassNTrack</strong>.</p>
           <Button className="btn-hero" onClick={() => navigate('/login')}>Go to Login</Button>
         </div>
       </div>
@@ -58,13 +58,16 @@ const Register = () => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-background">
       <div className="w-full max-w-md space-y-6">
+        <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" onClick={() => navigate('/')}>
+          <ArrowLeft className="w-4 h-4" /> Back to Home
+        </Button>
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 text-primary">
-            <Shield className="w-8 h-8" />
-            <span className="text-xl font-display font-bold">SNS Institutions</span>
+            <MapPin className="w-8 h-8" />
+            <span className="text-xl font-display font-bold">PassNTrack</span>
           </div>
           <h1 className="text-3xl font-display font-bold text-foreground">Create Account</h1>
-          <p className="text-muted-foreground">Register for the gatepass system</p>
+          <p className="text-muted-foreground">Register for PassNTrack gatepass system</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card-elevated space-y-4">

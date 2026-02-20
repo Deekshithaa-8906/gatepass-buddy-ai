@@ -49,6 +49,7 @@ export interface Complaint {
   text: string;
   createdAt: string;
   resolved: boolean;
+  resolvedAt?: string;
 }
 
 export interface GatepassNotification {

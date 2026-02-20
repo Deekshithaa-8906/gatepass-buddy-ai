@@ -3,11 +3,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { OutingRequest, UserRole } from '@/types';
 import { getRequests, updateRequest } from '@/lib/storage';
-import { Shield, LogOut, CheckCircle, XCircle, Clock, FileText } from 'lucide-react';
+import { MapPin, LogOut, CheckCircle, XCircle, Clock, FileText, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const classes =
+    status === 'approved' ? 'bg-success/20 text-success border-success/30' :
+    status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    'bg-warning/20 text-warning border-warning/30';
+  return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
+};
 
 const StaffDashboard = () => {
   const { user, logout } = useAuth();
@@ -29,6 +37,8 @@ const StaffDashboard = () => {
   };
 
   const pending = requests.filter(r => r.currentApprover === user.role && r.status === 'pending');
+  const pendingOuting = pending.filter(r => r.type === 'outing');
+  const pendingLeave = pending.filter(r => r.type === 'leave');
   const history = requests.filter(r => r.approvalChain.some(s => s.role === user.role && s.status !== 'pending'));
 
   const handleApprove = (id: string) => {
@@ -66,8 +76,8 @@ const StaffDashboard = () => {
       <header className="gradient-hero text-primary-foreground py-4 px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield className="w-6 h-6" />
-            <span className="font-display font-bold text-lg">SNS Gatepass</span>
+            <MapPin className="w-6 h-6" />
+            <span className="font-display font-bold text-lg">PassNTrack</span>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm opacity-90">{user.name} ({user.role.toUpperCase()})</span>
@@ -79,27 +89,50 @@ const StaffDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-3xl font-display font-bold text-foreground mb-6 capitalize">{user.role} Dashboard</h1>
+        <div className="flex items-center gap-4 mb-6">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/')}>
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Button>
+          <h1 className="text-3xl font-display font-bold text-foreground capitalize">{user.role} Dashboard</h1>
+        </div>
 
-        <Tabs defaultValue="pending" className="space-y-6">
+        <Tabs defaultValue="outing" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="pending" className="gap-1">
-              <Clock className="w-4 h-4" /> Pending ({pending.length})
+            <TabsTrigger value="outing" className="gap-1">
+              <Clock className="w-4 h-4" /> Pending Outing ({pendingOuting.length})
+            </TabsTrigger>
+            <TabsTrigger value="leave" className="gap-1">
+              <Clock className="w-4 h-4" /> Pending Leave ({pendingLeave.length})
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-1">
               <FileText className="w-4 h-4" /> History
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="pending">
-            {pending.length === 0 ? (
+          <TabsContent value="outing">
+            {pendingOuting.length === 0 ? (
               <div className="card-elevated text-center py-12 text-muted-foreground">
                 <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p>No pending requests</p>
+                <p>No pending outing requests</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {pending.map(r => (
+                {pendingOuting.map(r => (
+                  <RequestCard key={r.id} request={r} onApprove={handleApprove} onDecline={handleDecline} declineReason={declineReasons[r.id] || ''} onDeclineReasonChange={v => setDeclineReasons(p => ({ ...p, [r.id]: v }))} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="leave">
+            {pendingLeave.length === 0 ? (
+              <div className="card-elevated text-center py-12 text-muted-foreground">
+                <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p>No pending leave requests</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {pendingLeave.map(r => (
                   <RequestCard key={r.id} request={r} onApprove={handleApprove} onDecline={handleDecline} declineReason={declineReasons[r.id] || ''} onDeclineReasonChange={v => setDeclineReasons(p => ({ ...p, [r.id]: v }))} />
                 ))}
               </div>
@@ -120,7 +153,7 @@ const StaffDashboard = () => {
                         <h3 className="font-semibold text-foreground">{r.name} — {r.type} pass</h3>
                         <p className="text-sm text-muted-foreground">{r.year} Year, {r.branch} | {r.institution}</p>
                       </div>
-                      <Badge className={r.status === 'approved' ? 'status-approved' : 'status-declined'}>{r.status}</Badge>
+                      <StatusBadge status={r.status} />
                     </div>
                   </div>
                 ))}
@@ -147,7 +180,7 @@ function RequestCard({ request: r, onApprove, onDecline, declineReason, onDeclin
           <h3 className="font-semibold text-foreground text-lg">{r.name}</h3>
           <p className="text-sm text-muted-foreground">{r.type.toUpperCase()} | {r.year} Year, {r.branch}</p>
         </div>
-        <Badge className="status-pending">Pending Your Approval</Badge>
+        <Badge className="bg-warning/20 text-warning border border-warning/30">Pending Your Approval</Badge>
       </div>
       <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-4">
         <p><strong>Institution:</strong> {r.institution}</p>

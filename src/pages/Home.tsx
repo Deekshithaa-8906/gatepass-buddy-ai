@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Shield, LogIn, UserPlus } from 'lucide-react';
+import { MapPin, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const Home = () => {
@@ -10,8 +10,8 @@ const Home = () => {
       {/* Header */}
       <header className="gradient-hero text-primary-foreground py-4 px-6">
         <div className="max-w-6xl mx-auto flex items-center gap-3">
-          <Shield className="w-8 h-8" />
-          <h1 className="text-2xl font-display font-bold tracking-tight">SNS Institutions</h1>
+          <MapPin className="w-8 h-8" />
+          <h1 className="text-2xl font-display font-bold tracking-tight">PassNTrack</h1>
         </div>
       </header>
 
@@ -19,8 +19,8 @@ const Home = () => {
       <main className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-2xl text-center space-y-8">
           <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium">
-            <GraduationCap className="w-4 h-4" />
-            Hostel Gatepass Management
+            <MapPin className="w-4 h-4" />
+            SNS Institutions — Hostel Gatepass Management
           </div>
 
           <h2 className="text-5xl md:text-6xl font-display font-extrabold text-foreground leading-tight">
@@ -62,7 +62,7 @@ const Home = () => {
       </main>
 
       <footer className="py-4 text-center text-sm text-muted-foreground border-t">
-        © 2026 SNS Institutions — Hostel Gatepass System
+        © 2026 PassNTrack — SNS Institutions Hostel Gatepass System
       </footer>
     </div>
   );
