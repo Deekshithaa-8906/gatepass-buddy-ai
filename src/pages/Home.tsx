@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
-import { LogIn, UserPlus, Building2 } from 'lucide-react';
+import { LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import snsLogo from '@/assets/sns-logo.png';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -12,8 +13,8 @@ const Home = () => {
       <div className="w-full bg-white border-b border-border shadow-sm">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-4">
           {/* Logo placeholder */}
-          <div className="flex-shrink-0 w-14 h-14 rounded-full bg-primary flex items-center justify-center shadow">
-            <Building2 className="w-7 h-7 text-primary-foreground" />
+          <div className="flex-shrink-0 h-14 w-14 flex items-center justify-center">
+            <img src={snsLogo} alt="SNS Institutions Logo" className="h-14 w-14 object-contain" />
           </div>
           {/* Center text */}
           <div className="flex flex-col leading-tight">
