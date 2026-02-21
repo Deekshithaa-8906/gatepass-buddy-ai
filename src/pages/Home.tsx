@@ -2,12 +2,20 @@ import { useNavigate } from 'react-router-dom';
 import { LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import snsLogo from '@/assets/sns-logo.png';
+import campusBg from '@/assets/sns-campus-bg.png';
 
 const Home = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background relative">
+      {/* Background image with overlay */}
+      <div className="fixed inset-0 z-0">
+        <img src={campusBg} alt="" className="w-full h-full object-cover opacity-20" />
+        <div className="absolute inset-0 bg-white/70" />
+      </div>
+      {/* Content above background */}
+      <div className="relative z-10 min-h-screen flex flex-col">
 
       {/* 1️⃣ Official SNS Institutional Header */}
       <div className="w-full bg-white border-b border-border shadow-sm">
@@ -88,6 +96,7 @@ const Home = () => {
       <footer className="py-4 text-center text-sm text-muted-foreground border-t">
         © 2026 PassNTrack — SNS Institutions Hostel Management System
       </footer>
+      </div>
     </div>
   );
 };
