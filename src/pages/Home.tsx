@@ -57,7 +57,7 @@ const Home = () => {
             Welcome
           </h2>
 
-          <p className="text-base text-muted-foreground max-w-md mx-auto">
+          <p className="text-base font-bold text-foreground max-w-md mx-auto">
             Manage outing passes, leave requests, and complaints — streamlined for students, mentors, and administrators.
           </p>
 
