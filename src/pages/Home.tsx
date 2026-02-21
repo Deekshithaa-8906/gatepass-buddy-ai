@@ -92,7 +92,7 @@ const Home = () => {
         </div>
       </main>
 
-      <footer className="py-4 text-center text-sm text-muted-foreground border-t">
+      <footer className="py-4 text-center text-sm text-foreground font-bold border-t">
         © 2026 PassNTrack — SNS Institutions Hostel Management System
       </footer>
       </div>

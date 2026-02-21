@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { OutingRequest, Complaint, GatepassNotification, INSTITUTIONS, YEARS, getApprovalChain, ApprovalStep } from '@/types';
 import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead } from '@/lib/storage';
 import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
-import { MapPin, LogOut, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, Mail, MessageSquare, ArrowLeft } from 'lucide-react';
+import { MapPin, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, Mail, MessageSquare, ArrowLeft } from 'lucide-react';
+import ProfileDropdown from '@/components/ProfileDropdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,9 +54,7 @@ const StudentDashboard = () => {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm opacity-90">Welcome, {user.name}</span>
-            <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => { logout(); navigate('/'); }}>
-              <LogOut className="w-4 h-4 mr-1" /> Logout
-            </Button>
+            <ProfileDropdown />
           </div>
         </div>
       </header>

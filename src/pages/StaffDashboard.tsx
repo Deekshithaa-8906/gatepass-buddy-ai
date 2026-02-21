@@ -3,7 +3,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { OutingRequest, UserRole } from '@/types';
 import { getRequests, updateRequest } from '@/lib/storage';
-import { MapPin, LogOut, CheckCircle, XCircle, Clock, FileText, ArrowLeft } from 'lucide-react';
+import { MapPin, CheckCircle, XCircle, Clock, FileText, ArrowLeft } from 'lucide-react';
+import ProfileDropdown from '@/components/ProfileDropdown';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -81,9 +82,7 @@ const StaffDashboard = () => {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm opacity-90">{user.name} ({user.role.toUpperCase()})</span>
-            <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => { logout(); navigate('/'); }}>
-              <LogOut className="w-4 h-4 mr-1" /> Logout
-            </Button>
+            <ProfileDropdown />
           </div>
         </div>
       </header>

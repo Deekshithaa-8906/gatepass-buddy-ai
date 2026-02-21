@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { OutingRequest, Complaint } from '@/types';
 import { getRequests, updateRequest, getComplaints, addNotification, resolveComplaint } from '@/lib/storage';
 import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
-import { MapPin, LogOut, CheckCircle, XCircle, Clock, FileText, AlertTriangle, Download, ArrowLeft, CheckCheck } from 'lucide-react';
+import { MapPin, CheckCircle, XCircle, Clock, FileText, AlertTriangle, Download, ArrowLeft, CheckCheck } from 'lucide-react';
+import ProfileDropdown from '@/components/ProfileDropdown';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -173,9 +174,7 @@ const WardenDashboard = () => {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm opacity-90">{user.name} (WARDEN)</span>
-            <Button variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/10" onClick={() => { logout(); navigate('/'); }}>
-              <LogOut className="w-4 h-4 mr-1" /> Logout
-            </Button>
+            <ProfileDropdown />
           </div>
         </div>
       </header>
