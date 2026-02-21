@@ -11,8 +11,7 @@ const Home = () => {
     <div className="min-h-screen flex flex-col bg-background relative">
       {/* Background image with overlay */}
       <div className="fixed inset-0 z-0">
-        <img src={campusBg} alt="" className="w-full h-full object-cover opacity-20" />
-        <div className="absolute inset-0 bg-white/70" />
+        <img src={campusBg} alt="" className="w-full h-full object-cover opacity-80" />
       </div>
       {/* Content above background */}
       <div className="relative z-10 min-h-screen flex flex-col">
