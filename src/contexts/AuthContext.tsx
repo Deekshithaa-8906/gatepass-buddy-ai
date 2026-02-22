@@ -3,7 +3,7 @@ import { User, UserRole } from '@/types';
 
 interface AuthContextType {
   user: User | null;
-  login: (identifier: string, password: string) => { success: boolean; error?: string };
+  login: (identifier: string, password: string, rememberMe?: boolean) => { success: boolean; error?: string };
   register: (data: Omit<User, 'id'>) => { success: boolean; error?: string };
   logout: () => void;
 }
@@ -27,18 +27,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('gatepass_current_user');
+    const saved = localStorage.getItem('gatepass_current_user') || sessionStorage.getItem('gatepass_current_user');
     if (saved) setUser(JSON.parse(saved));
   }, []);
 
-  const login = (identifier: string, password: string) => {
+  const login = (identifier: string, password: string, rememberMe = false) => {
     const users = getUsers();
     const found = users.find(
       u => (u.phone === identifier || u.email === identifier) && u.password === password
     );
     if (!found) return { success: false, error: 'Invalid phone/email or password' };
     setUser(found);
-    localStorage.setItem('gatepass_current_user', JSON.stringify(found));
+    if (rememberMe) {
+      localStorage.setItem('gatepass_current_user', JSON.stringify(found));
+    } else {
+      sessionStorage.setItem('gatepass_current_user', JSON.stringify(found));
+    }
     return { success: true };
   };
 
@@ -59,6 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = () => {
     setUser(null);
     localStorage.removeItem('gatepass_current_user');
+    sessionStorage.removeItem('gatepass_current_user');
   };
 
   return (
