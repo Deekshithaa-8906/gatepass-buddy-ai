@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { OutingRequest, Complaint, GatepassNotification, INSTITUTIONS, YEARS, getApprovalChain, ApprovalStep } from '@/types';
 import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead } from '@/lib/storage';
 import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
-import { MapPin, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, Mail, MessageSquare, ArrowLeft } from 'lucide-react';
+import { MapPin, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, ArrowLeft } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -345,31 +345,39 @@ function NotificationsView({ notifications, onRefresh }: { notifications: Gatepa
     onRefresh();
   };
 
+  const isApproved = (msg: string) => msg.toLowerCase().includes('approved');
+  const isRejected = (msg: string) => msg.toLowerCase().includes('rejected') || msg.toLowerCase().includes('declined');
+
   return (
     <div className="space-y-4">
-      {notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(n => (
-        <div key={n.id} className={`card-elevated ${!n.read ? 'border-primary/30 bg-primary/5' : ''}`}>
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-center gap-2">
-              {n.method === 'email' ? <Mail className="w-4 h-4 text-primary" /> : <MessageSquare className="w-4 h-4 text-secondary" />}
-              <span className="text-sm font-semibold text-foreground">
-                {n.method === 'email' ? 'Email Notification' : 'SMS Notification'} — PassNTrack
-              </span>
-              {!n.read && <Badge className="bg-warning/20 text-warning border border-warning/30 text-xs">New</Badge>}
+      {notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(n => {
+        const approved = isApproved(n.message);
+        const rejected = isRejected(n.message);
+        const borderColor = approved ? 'border-l-4 border-l-[#28A745]' : rejected ? 'border-l-4 border-l-[#FF0000]' : '';
+
+        return (
+          <div key={n.id} className={`card-elevated bg-white ${borderColor} ${!n.read ? 'ring-1 ring-primary/20' : ''}`}>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {approved && <CheckCircle className="w-5 h-5 text-[#28A745]" />}
+                {rejected && <XCircle className="w-5 h-5 text-[#FF0000]" />}
+                {!approved && !rejected && <Bell className="w-5 h-5 text-primary" />}
+                <span className="text-sm font-semibold text-[#000000]">
+                  {approved ? 'Approved' : rejected ? 'Rejected' : 'Notification'} — PassNTrack
+                </span>
+                {!n.read && <Badge className="bg-warning/20 text-warning border border-warning/30 text-xs">New</Badge>}
+              </div>
+              <span className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</span>
             </div>
-            <span className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</span>
+            <p className="text-sm text-[#000000] bg-muted p-3 rounded-lg">{n.message}</p>
+            {!n.read && (
+              <Button size="sm" variant="ghost" className="mt-2 text-xs" onClick={() => handleMarkRead(n.id)}>
+                Mark as read
+              </Button>
+            )}
           </div>
-          <p className="text-sm text-muted-foreground mb-1">
-            <strong>To:</strong> {n.destination}
-          </p>
-          <p className="text-sm text-foreground bg-muted p-3 rounded-lg">{n.message}</p>
-          {!n.read && (
-            <Button size="sm" variant="ghost" className="mt-2 text-xs" onClick={() => handleMarkRead(n.id)}>
-              Mark as read
-            </Button>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
