@@ -5,10 +5,12 @@ import { MapPin, LogIn, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const Login = () => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -16,9 +18,9 @@ const Login = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const result = login(identifier, password);
+    const result = login(identifier, password, rememberMe);
     if (result.success) {
-      const user = JSON.parse(localStorage.getItem('gatepass_current_user') || '{}');
+      const user = JSON.parse(localStorage.getItem('gatepass_current_user') || sessionStorage.getItem('gatepass_current_user') || '{}');
       const dashMap: Record<string, string> = {
         student: '/student',
         mentor: '/staff',
@@ -55,11 +57,20 @@ const Login = () => {
           )}
           <div className="space-y-2">
             <Label htmlFor="identifier">Phone Number or Email</Label>
-            <Input id="identifier" placeholder="Enter phone number or email" value={identifier} onChange={e => setIdentifier(e.target.value)} required />
+            <Input id="identifier" name="username" autoComplete="username" placeholder="Enter phone number or email" value={identifier} onChange={e => setIdentifier(e.target.value)} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" placeholder="Enter password" value={password} onChange={e => setPassword(e.target.value)} required />
+            <Input id="password" name="password" type="password" autoComplete="current-password" placeholder="Enter password" value={password} onChange={e => setPassword(e.target.value)} required />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="rememberMe"
+              checked={rememberMe}
+              onCheckedChange={(checked) => setRememberMe(checked === true)}
+              className="border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground"
+            />
+            <Label htmlFor="rememberMe" className="text-sm font-normal cursor-pointer select-none">Remember Me</Label>
           </div>
           <Button type="submit" className="w-full btn-hero gap-2">
             <LogIn className="w-4 h-4" /> Login
