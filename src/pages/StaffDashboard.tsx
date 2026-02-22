@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { OutingRequest, UserRole } from '@/types';
-import { getRequests, updateRequest } from '@/lib/storage';
+import { getRequests, updateRequest, addNotification } from '@/lib/storage';
 import { MapPin, CheckCircle, XCircle, Clock, FileText, ArrowLeft } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import { Button } from '@/components/ui/button';
@@ -61,14 +61,31 @@ const StaffDashboard = () => {
 
   const handleDecline = (id: string) => {
     const reason = declineReasons[id] || 'No reason provided';
+    let declinedRequest: OutingRequest | null = null;
     updateRequest(id, r => {
       const stepIdx = r.approvalChain.findIndex(s => s.role === user.role);
       if (stepIdx === -1) return r;
       r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: user.name, reason, timestamp: new Date().toISOString() };
       r.currentApprover = 'declined';
       r.status = 'declined';
+      declinedRequest = { ...r };
       return r;
     });
+
+    if (declinedRequest) {
+      const req = declinedRequest as OutingRequest;
+      const roleName = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+      addNotification({
+        id: crypto.randomUUID(),
+        requestId: req.id,
+        studentId: req.studentId,
+        method: 'sms',
+        destination: req.studentPhone,
+        message: `Your gatepass request has been rejected by your ${roleName}. Please contact your ${roleName} for further details.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
     refreshRequests();
   };
 

@@ -93,7 +93,7 @@ const WardenDashboard = () => {
         studentId: req.studentId,
         method: 'sms',
         destination: req.studentPhone,
-        message: `Your gatepass request has been rejected. Please contact your mentor or warden.`,
+        message: `Your gatepass request has been rejected by your Warden. Please contact your Warden for further details.`,
         createdAt: new Date().toISOString(),
         read: false,
       });
