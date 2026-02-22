@@ -57,18 +57,14 @@ const WardenDashboard = () => {
 
     if (approvedRequest) {
       const req = approvedRequest as OutingRequest;
-      const hasEmail = req.studentEmail && req.studentEmail.trim() !== '';
-      const method = hasEmail ? 'email' : 'sms';
-      const destination = hasEmail ? req.studentEmail : req.studentPhone;
-      const passLabel = req.type === 'leave' ? 'leave pass' : 'gatepass';
 
       addNotification({
         id: crypto.randomUUID(),
         requestId: req.id,
         studentId: req.studentId,
-        method,
-        destination,
-        message: `[PassNTrack] Your ${req.type} pass has been APPROVED by Warden! ${passLabel.charAt(0).toUpperCase() + passLabel.slice(1)} for ${new Date(req.outDateTime).toLocaleDateString()} – ${new Date(req.inDateTime).toLocaleDateString()} is ready for download. ${method === 'email' ? 'A copy has been sent to your email.' : 'Check your messages for details.'}`,
+        method: 'sms',
+        destination: req.studentPhone,
+        message: `Your gatepass has been approved..! You can download it.`,
         createdAt: new Date().toISOString(),
         read: false,
       });
@@ -91,14 +87,13 @@ const WardenDashboard = () => {
 
     if (declinedRequest) {
       const req = declinedRequest as OutingRequest;
-      const hasEmail = req.studentEmail && req.studentEmail.trim() !== '';
       addNotification({
         id: crypto.randomUUID(),
         requestId: req.id,
         studentId: req.studentId,
-        method: hasEmail ? 'email' : 'sms',
-        destination: hasEmail ? req.studentEmail : req.studentPhone,
-        message: `[PassNTrack] Your ${req.type} pass has been DECLINED by Warden. Reason: ${reason}`,
+        method: 'sms',
+        destination: req.studentPhone,
+        message: `Your gatepass request has been rejected. Please contact your mentor or warden.`,
         createdAt: new Date().toISOString(),
         read: false,
       });
