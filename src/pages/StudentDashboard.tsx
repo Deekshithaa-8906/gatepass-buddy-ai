@@ -22,6 +22,14 @@ const StatusBadge = ({ status }: { status: string }) => {
   return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
 };
 
+const ComplaintStatusBadge = ({ status }: { status: string }) => {
+  const classes =
+    status === 'resolved' ? 'bg-[#28A745]/20 text-[#28A745] border-[#28A745]/30' :
+    status === 'escalated' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    'bg-warning/20 text-warning border-warning/30';
+  return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
+};
+
 const StudentDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
