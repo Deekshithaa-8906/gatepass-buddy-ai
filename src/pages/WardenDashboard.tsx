@@ -16,6 +16,7 @@ const StatusBadge = ({ status }: { status: string }) => {
     status === 'approved' ? 'bg-success/20 text-success border-success/30' :
     status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
     status === 'resolved' ? 'bg-success/20 text-success border-success/30' :
+    status === 'escalated' ? 'bg-destructive/20 text-destructive border-destructive/30' :
     'bg-warning/20 text-warning border-warning/30';
   return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
 };
