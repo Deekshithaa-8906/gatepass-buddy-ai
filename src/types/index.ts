@@ -1,4 +1,4 @@
-export type UserRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden';
+export type UserRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal';
 
 export interface User {
   id: string;
@@ -7,6 +7,7 @@ export interface User {
   email: string;
   password: string;
   role: UserRole;
+  profilePhoto?: string; // base64 data URL
 }
 
 export type ApprovalStatus = 'pending' | 'approved' | 'declined';
@@ -41,6 +42,8 @@ export interface OutingRequest {
   createdAt: string;
 }
 
+export type ComplaintStatus = 'pending' | 'resolved' | 'escalated';
+
 export interface Complaint {
   id: string;
   studentId: string;
@@ -50,6 +53,8 @@ export interface Complaint {
   createdAt: string;
   resolved: boolean;
   resolvedAt?: string;
+  status: ComplaintStatus;
+  escalatedAt?: string;
 }
 
 export interface GatepassNotification {
@@ -60,6 +65,16 @@ export interface GatepassNotification {
   destination: string;
   message: string;
   createdAt: string;
+  read: boolean;
+}
+
+export interface PrincipalNotification {
+  id: string;
+  complaintId: string;
+  studentName: string;
+  roomNumber: string;
+  complaintText: string;
+  escalatedAt: string;
   read: boolean;
 }
 

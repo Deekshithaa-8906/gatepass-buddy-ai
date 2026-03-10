@@ -16,6 +16,7 @@ const StatusBadge = ({ status }: { status: string }) => {
     status === 'approved' ? 'bg-success/20 text-success border-success/30' :
     status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
     status === 'resolved' ? 'bg-success/20 text-success border-success/30' :
+    status === 'escalated' ? 'bg-destructive/20 text-destructive border-destructive/30' :
     'bg-warning/20 text-warning border-warning/30';
   return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
 };
@@ -239,7 +240,7 @@ const WardenDashboard = () => {
                         <h3 className="font-semibold text-foreground">{c.name} — Room {c.roomNumber}</h3>
                         <p className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</p>
                       </div>
-                      <StatusBadge status={c.resolved ? 'resolved' : 'pending'} />
+                      <StatusBadge status={c.resolved ? 'resolved' : c.status === 'escalated' ? 'escalated' : 'pending'} />
                     </div>
                     <p className="text-sm text-muted-foreground mb-3">{c.text}</p>
                     {c.resolved && c.resolvedAt && (

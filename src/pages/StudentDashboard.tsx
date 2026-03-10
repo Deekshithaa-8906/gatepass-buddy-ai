@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { OutingRequest, Complaint, GatepassNotification, INSTITUTIONS, YEARS, getApprovalChain, ApprovalStep } from '@/types';
-import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead } from '@/lib/storage';
+import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead, checkAndEscalateComplaints } from '@/lib/storage';
 import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
 import { MapPin, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, ArrowLeft } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
@@ -22,6 +22,14 @@ const StatusBadge = ({ status }: { status: string }) => {
   return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
 };
 
+const ComplaintStatusBadge = ({ status }: { status: string }) => {
+  const classes =
+    status === 'resolved' ? 'bg-[#28A745]/20 text-[#28A745] border-[#28A745]/30' :
+    status === 'escalated' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    'bg-warning/20 text-warning border-warning/30';
+  return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
+};
+
 const StudentDashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -31,6 +39,8 @@ const StudentDashboard = () => {
 
   useEffect(() => {
     if (!user || user.role !== 'student') { navigate('/'); return; }
+    // Check for complaint escalation on load
+    checkAndEscalateComplaints();
     refreshData();
   }, [user, navigate]);
 
@@ -89,6 +99,25 @@ const StudentDashboard = () => {
           </TabsContent>
           <TabsContent value="complaints">
             <ComplaintForm user={user} onSubmit={refreshData} />
+            {complaints.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h3 className="text-lg font-display font-bold text-foreground">Your Complaints</h3>
+                {complaints.map(c => (
+                  <div key={c.id} className={`card-elevated ${c.status === 'escalated' ? 'border-l-4 border-l-destructive' : c.status === 'resolved' ? 'border-l-4 border-l-[#28A745]' : ''}`}>
+                    <div className="flex justify-between items-start mb-1">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Room {c.roomNumber}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</p>
+                      </div>
+                      <ComplaintStatusBadge status={c.status || (c.resolved ? 'resolved' : 'pending')} />
+                    </div>
+                    <p className="text-sm text-muted-foreground">{c.text}</p>
+                    {c.escalatedAt && <p className="text-xs text-destructive mt-1">Escalated on {new Date(c.escalatedAt).toLocaleString()}</p>}
+                    {c.resolvedAt && <p className="text-xs text-[#28A745] mt-1">Resolved on {new Date(c.resolvedAt).toLocaleString()}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </TabsContent>
           <TabsContent value="status">
             <StatusView requests={requests} />
@@ -243,6 +272,7 @@ function ComplaintForm({ user, onSubmit }: { user: { id: string; name: string };
       text,
       createdAt: new Date().toISOString(),
       resolved: false,
+      status: 'pending',
     });
     setSubmitted(true);
     onSubmit();
