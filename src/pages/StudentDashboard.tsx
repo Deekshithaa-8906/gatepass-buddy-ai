@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { OutingRequest, Complaint, GatepassNotification, INSTITUTIONS, YEARS, getApprovalChain, ApprovalStep } from '@/types';
-import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead } from '@/lib/storage';
+import { getRequests, addRequest, getComplaints, addComplaint, getNotifications, markNotificationRead, checkAndEscalateComplaints } from '@/lib/storage';
 import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
 import { MapPin, FileText, ClipboardList, AlertTriangle, Download, Clock, CheckCircle, XCircle, Bell, ArrowLeft } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
