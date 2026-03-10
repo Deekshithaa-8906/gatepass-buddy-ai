@@ -31,6 +31,8 @@ const StudentDashboard = () => {
 
   useEffect(() => {
     if (!user || user.role !== 'student') { navigate('/'); return; }
+    // Check for complaint escalation on load
+    checkAndEscalateComplaints();
     refreshData();
   }, [user, navigate]);
 
