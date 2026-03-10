@@ -83,7 +83,7 @@ const Home = () => {
 
           {/* Role chips */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-4">
-            {['Student', 'Mentor', 'Advisor', 'HOD', 'Warden'].map(role => (
+            {['Student', 'Mentor', 'Advisor', 'HOD', 'Warden', 'Principal'].map(role => (
               <div key={role} className="card-elevated text-center py-3 px-2">
                 <p className="text-sm font-semibold text-foreground">{role}</p>
               </div>
