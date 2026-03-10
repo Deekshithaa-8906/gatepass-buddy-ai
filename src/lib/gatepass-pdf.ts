@@ -1,7 +1,9 @@
 import jsPDF from 'jspdf';
+import QRCode from 'qrcode';
 import { OutingRequest } from '@/types';
+import { getUserProfilePhoto } from '@/lib/storage';
 
-export function generateGatepassPDF(request: OutingRequest): jsPDF {
+export async function generateGatepassPDF(request: OutingRequest, profilePhoto?: string): Promise<jsPDF> {
   const doc = new jsPDF();
   const w = doc.internal.pageSize.getWidth();
   const passLabel = request.type === 'leave' ? 'Official Leave Pass' : 'Official Gatepass';
@@ -16,6 +18,13 @@ export function generateGatepassPDF(request: OutingRequest): jsPDF {
   doc.setFontSize(13);
   doc.setFont('helvetica', 'normal');
   doc.text(`PassNTrack – ${passLabel}`, w / 2, 32, { align: 'center' });
+
+  // Profile photo (top-right, below header)
+  if (profilePhoto) {
+    try {
+      doc.addImage(profilePhoto, 'JPEG', w - 45, 50, 25, 25);
+    } catch { /* ignore if image fails */ }
+  }
 
   // Body
   doc.setTextColor(30, 30, 30);
@@ -88,6 +97,30 @@ export function generateGatepassPDF(request: OutingRequest): jsPDF {
   doc.setFont('helvetica', 'normal');
   doc.text(`Generated on: ${new Date().toLocaleString()} by PassNTrack`, w / 2, y, { align: 'center' });
 
+  // QR Code (bottom-right)
+  const qrData = JSON.stringify({
+    id: request.id,
+    name: request.name,
+    regNumber: request.regNumber,
+    institution: request.institution,
+    roomNumber: request.roomNumber,
+    outDateTime: request.outDateTime,
+    inDateTime: request.inDateTime,
+    status: request.status,
+    verifyUrl: `${window.location.origin}/verify/${request.id}`,
+  });
+
+  try {
+    const qrDataUrl = await QRCode.toDataURL(qrData, { width: 200, margin: 1 });
+    const qrSize = 40;
+    const qrX = w - qrSize - 15;
+    const qrY = doc.internal.pageSize.getHeight() - qrSize - 25;
+    doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Scan to verify', qrX + qrSize / 2, qrY + qrSize + 4, { align: 'center' });
+  } catch { /* QR generation failed silently */ }
+
   // Footer
   doc.setFillColor(30, 58, 95);
   doc.rect(0, doc.internal.pageSize.getHeight() - 15, w, 15, 'F');
@@ -98,8 +131,9 @@ export function generateGatepassPDF(request: OutingRequest): jsPDF {
   return doc;
 }
 
-export function downloadGatepassPDF(request: OutingRequest) {
-  const doc = generateGatepassPDF(request);
+export async function downloadGatepassPDF(request: OutingRequest) {
+  const profilePhoto = getUserProfilePhoto(request.studentId);
+  const doc = await generateGatepassPDF(request, profilePhoto);
   const prefix = request.type === 'leave' ? 'leavepass' : 'gatepass';
   doc.save(`${prefix}-${request.id.slice(0, 8)}.pdf`);
 }
