@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const ProfileDropdown = () => {
   const { user, logout } = useAuth();
@@ -23,9 +24,16 @@ const ProfileDropdown = () => {
         <Button
           variant="ghost"
           size="icon"
-          className="rounded-full text-primary-foreground hover:bg-[hsl(0,100%,40%)] transition-colors"
+          className="rounded-full text-primary-foreground hover:bg-[hsl(0,100%,40%)] transition-colors p-0 overflow-hidden"
         >
-          <User className="w-5 h-5" />
+          {user.profilePhoto ? (
+            <Avatar className="w-9 h-9">
+              <AvatarImage src={user.profilePhoto} />
+              <AvatarFallback><User className="w-5 h-5" /></AvatarFallback>
+            </Avatar>
+          ) : (
+            <User className="w-5 h-5" />
+          )}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -33,11 +41,19 @@ const ProfileDropdown = () => {
         className="w-72 bg-white text-black rounded-xl shadow-lg border border-border p-0"
       >
         <div className="p-4 space-y-2">
-          <DropdownMenuLabel className="text-base font-bold text-black p-0">
-            {user.name}
-          </DropdownMenuLabel>
+          <div className="flex items-center gap-3">
+            <Avatar className="w-12 h-12">
+              <AvatarImage src={user.profilePhoto} />
+              <AvatarFallback className="bg-muted text-muted-foreground">{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div>
+              <DropdownMenuLabel className="text-base font-bold text-black p-0">
+                {user.name}
+              </DropdownMenuLabel>
+              <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+            </div>
+          </div>
           <div className="space-y-1 text-sm text-black">
-            <p><span className="font-semibold">Role:</span> {user.role.charAt(0).toUpperCase() + user.role.slice(1)}</p>
             <p><span className="font-semibold">Email:</span> {user.email}</p>
             <p><span className="font-semibold">Phone:</span> {user.phone}</p>
           </div>

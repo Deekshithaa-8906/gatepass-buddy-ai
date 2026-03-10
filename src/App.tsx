@@ -10,6 +10,8 @@ import Register from "./pages/Register";
 import StudentDashboard from "./pages/StudentDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import WardenDashboard from "./pages/WardenDashboard";
+import PrincipalDashboard from "./pages/PrincipalDashboard";
+import VerifyGatepass from "./pages/VerifyGatepass";
 import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
 
@@ -30,6 +32,8 @@ const App = () => (
             <Route path="/student" element={<StudentDashboard />} />
             <Route path="/staff" element={<StaffDashboard />} />
             <Route path="/warden" element={<WardenDashboard />} />
+            <Route path="/principal" element={<PrincipalDashboard />} />
+            <Route path="/verify/:id" element={<VerifyGatepass />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

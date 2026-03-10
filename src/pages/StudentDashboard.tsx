@@ -243,6 +243,7 @@ function ComplaintForm({ user, onSubmit }: { user: { id: string; name: string };
       text,
       createdAt: new Date().toISOString(),
       resolved: false,
+      status: 'pending',
     });
     setSubmitted(true);
     onSubmit();
