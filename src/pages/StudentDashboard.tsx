@@ -91,6 +91,25 @@ const StudentDashboard = () => {
           </TabsContent>
           <TabsContent value="complaints">
             <ComplaintForm user={user} onSubmit={refreshData} />
+            {complaints.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h3 className="text-lg font-display font-bold text-foreground">Your Complaints</h3>
+                {complaints.map(c => (
+                  <div key={c.id} className={`card-elevated ${c.status === 'escalated' ? 'border-l-4 border-l-destructive' : c.status === 'resolved' ? 'border-l-4 border-l-[#28A745]' : ''}`}>
+                    <div className="flex justify-between items-start mb-1">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">Room {c.roomNumber}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</p>
+                      </div>
+                      <ComplaintStatusBadge status={c.status || (c.resolved ? 'resolved' : 'pending')} />
+                    </div>
+                    <p className="text-sm text-muted-foreground">{c.text}</p>
+                    {c.escalatedAt && <p className="text-xs text-destructive mt-1">Escalated on {new Date(c.escalatedAt).toLocaleString()}</p>}
+                    {c.resolvedAt && <p className="text-xs text-[#28A745] mt-1">Resolved on {new Date(c.resolvedAt).toLocaleString()}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
           </TabsContent>
           <TabsContent value="status">
             <StatusView requests={requests} />
