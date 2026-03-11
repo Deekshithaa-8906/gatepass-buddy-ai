@@ -5,14 +5,14 @@ import { Badge } from '@/components/ui/badge';
 const ApprovalTimeline = ({ chain }: { chain: ApprovalStep[] }) => {
   const icon = (s: ApprovalStep) => {
     if (s.status === 'approved') return <CheckCircle className="w-4 h-4 text-success" />;
-    if (s.status === 'reconsidered') return <RotateCcw className="w-4 h-4 text-amber-500" />;
+    if (s.status === 'reconsidered') return <RotateCcw className="w-4 h-4 text-blue-500" />;
     if (s.status === 'declined') return <XCircle className="w-4 h-4 text-destructive" />;
     return <Clock className="w-4 h-4 text-warning" />;
   };
 
   const badgeClass = (status: string) => {
     if (status === 'approved') return 'bg-success/20 text-success border-success/30';
-    if (status === 'reconsidered') return 'bg-amber-500/20 text-amber-600 border-amber-500/30';
+    if (status === 'reconsidered') return 'bg-blue-500/20 text-blue-600 border-blue-500/30';
     if (status === 'declined') return 'bg-destructive/20 text-destructive border-destructive/30';
     return 'bg-warning/20 text-warning border-warning/30';
   };

@@ -88,7 +88,12 @@ export const INSTITUTIONS = [
 
 export const YEARS = ['1st', '2nd', '3rd', '4th'] as const;
 
-export function getApprovalChain(year: string): UserRole[] {
+export function getApprovalChain(year: string, type: 'outing' | 'leave' = 'outing'): UserRole[] {
+  // Leave requests always follow the full chain
+  if (type === 'leave') {
+    return ['mentor', 'advisor', 'hod', 'warden'];
+  }
+  // Outing: 1st year full chain, others warden only
   if (year === '1st') {
     return ['mentor', 'advisor', 'hod', 'warden'];
   }
