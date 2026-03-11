@@ -310,12 +310,6 @@ function ComplaintForm({ user, onSubmit }: { user: { id: string; name: string };
 }
 
 function StatusView({ requests }: { requests: OutingRequest[] }) {
-  const statusIcon = (s: string) => {
-    if (s === 'approved') return <CheckCircle className="w-4 h-4 text-success" />;
-    if (s === 'declined') return <XCircle className="w-4 h-4 text-destructive" />;
-    return <Clock className="w-4 h-4 text-warning" />;
-  };
-
   if (requests.length === 0) {
     return (
       <div className="card-elevated text-center py-12 text-muted-foreground">
@@ -340,16 +334,7 @@ function StatusView({ requests }: { requests: OutingRequest[] }) {
             <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()} → <strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
             <p><strong>Reason:</strong> {r.reason}</p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {r.approvalChain.map((step, i) => (
-              <div key={i} className="flex items-center gap-1 text-xs">
-                {statusIcon(step.status)}
-                <span className="capitalize">{step.role}</span>
-                {step.reason && <span className="text-destructive">({step.reason})</span>}
-                {i < r.approvalChain.length - 1 && <span className="text-muted-foreground mx-1">→</span>}
-              </div>
-            ))}
-          </div>
+          <ApprovalTimeline chain={r.approvalChain} />
           {r.status === 'approved' && (
             <Button size="sm" className="mt-3 gap-1" variant="outline" onClick={() => downloadGatepassPDF(r)}>
               <Download className="w-3 h-3" /> Download {r.type === 'leave' ? 'Leave Pass' : 'Gatepass'} PDF
