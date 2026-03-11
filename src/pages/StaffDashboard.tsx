@@ -3,23 +3,25 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { OutingRequest, UserRole } from '@/types';
 import { getRequests, updateRequest, addNotification } from '@/lib/storage';
-import { MapPin, CheckCircle, XCircle, Clock, FileText, ArrowLeft } from 'lucide-react';
+import { MapPin, CheckCircle, XCircle, Clock, FileText, ArrowLeft, RotateCcw } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import ApprovalTimeline from '@/components/ApprovalTimeline';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const classes =
-    status === 'approved' ? 'bg-success/20 text-success border-success/30' :
+    status === 'approved' || status === 'reconsidered' ? 'bg-success/20 text-success border-success/30' :
     status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
     'bg-warning/20 text-warning border-warning/30';
-  return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
+  const label = status === 'reconsidered' ? 'Reconsidered' : status;
+  return <Badge className={`capitalize border ${classes}`}>{label}</Badge>;
 };
 
 const StaffDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [requests, setRequests] = useState<OutingRequest[]>([]);
   const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({});
@@ -41,6 +43,12 @@ const StaffDashboard = () => {
   const pendingOuting = pending.filter(r => r.type === 'outing');
   const pendingLeave = pending.filter(r => r.type === 'leave');
   const history = requests.filter(r => r.approvalChain.some(s => s.role === user.role && s.status !== 'pending'));
+
+  // Find requests declined by this user that can be reconsidered
+  const declinedByMe = requests.filter(r => {
+    const step = r.approvalChain.find(s => s.role === user.role);
+    return step && step.status === 'declined' && r.status === 'declined' && r.currentApprover === 'declined';
+  });
 
   const handleApprove = (id: string) => {
     updateRequest(id, r => {
@@ -89,6 +97,47 @@ const StaffDashboard = () => {
     refreshRequests();
   };
 
+  const handleReconsider = (id: string) => {
+    updateRequest(id, r => {
+      const stepIdx = r.approvalChain.findIndex(s => s.role === user.role);
+      if (stepIdx === -1) return r;
+      r.approvalChain[stepIdx] = {
+        ...r.approvalChain[stepIdx],
+        status: 'reconsidered',
+        approvedBy: user.name,
+        reason: undefined,
+        timestamp: new Date().toISOString(),
+      };
+      // Continue to next approver
+      const nextStep = r.approvalChain[stepIdx + 1];
+      if (nextStep) {
+        r.currentApprover = nextStep.role;
+        r.status = 'pending';
+      } else {
+        r.currentApprover = 'completed';
+        r.status = 'approved';
+      }
+      return r;
+    });
+
+    // Notify student
+    const req = getRequests().find(r => r.id === id);
+    if (req) {
+      const roleName = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+      addNotification({
+        id: crypto.randomUUID(),
+        requestId: req.id,
+        studentId: req.studentId,
+        method: 'sms',
+        destination: req.studentPhone,
+        message: `Your gatepass request has been reconsidered and approved by your ${roleName}. It is now forwarded to the next authority.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
+    refreshRequests();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="gradient-hero text-primary-foreground py-4 px-6">
@@ -113,13 +162,18 @@ const StaffDashboard = () => {
         </div>
 
         <Tabs defaultValue="outing" className="space-y-6">
-          <TabsList>
+          <TabsList className="flex flex-wrap gap-1">
             <TabsTrigger value="outing" className="gap-1">
               <Clock className="w-4 h-4" /> Pending Outing ({pendingOuting.length})
             </TabsTrigger>
             <TabsTrigger value="leave" className="gap-1">
               <Clock className="w-4 h-4" /> Pending Leave ({pendingLeave.length})
             </TabsTrigger>
+            {declinedByMe.length > 0 && (
+              <TabsTrigger value="declined" className="gap-1">
+                <XCircle className="w-4 h-4" /> Declined ({declinedByMe.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="history" className="gap-1">
               <FileText className="w-4 h-4" /> History
             </TabsTrigger>
@@ -155,6 +209,35 @@ const StaffDashboard = () => {
             )}
           </TabsContent>
 
+          {declinedByMe.length > 0 && (
+            <TabsContent value="declined">
+              <div className="space-y-4">
+                {declinedByMe.map(r => (
+                  <div key={r.id} className="card-elevated border-l-4 border-l-destructive">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-semibold text-foreground text-lg">{r.name}</h3>
+                        <p className="text-sm text-muted-foreground">{r.type.toUpperCase()} | {r.year} Year, {r.branch} | {r.institution}</p>
+                      </div>
+                      <StatusBadge status="declined" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
+                      <p><strong>Reg No:</strong> {r.regNumber}</p>
+                      <p><strong>Room:</strong> {r.roomNumber}</p>
+                      <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()}</p>
+                      <p><strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
+                      <p className="col-span-2"><strong>Reason:</strong> {r.reason}</p>
+                    </div>
+                    <ApprovalTimeline chain={r.approvalChain} />
+                    <Button className="mt-3 gap-2 bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleReconsider(r.id)}>
+                      <RotateCcw className="w-4 h-4" /> Reconsider & Approve
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+          )}
+
           <TabsContent value="history">
             {history.length === 0 ? (
               <div className="card-elevated text-center py-12 text-muted-foreground">
@@ -171,6 +254,7 @@ const StaffDashboard = () => {
                       </div>
                       <StatusBadge status={r.status} />
                     </div>
+                    <ApprovalTimeline chain={r.approvalChain} />
                   </div>
                 ))}
               </div>
@@ -208,7 +292,10 @@ function RequestCard({ request: r, onApprove, onDecline, declineReason, onDeclin
         <p><strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
         <p className="col-span-2"><strong>Reason:</strong> {r.reason}</p>
       </div>
-      <div className="flex items-end gap-3">
+      {r.approvalChain.some(s => s.status !== 'pending') && (
+        <ApprovalTimeline chain={r.approvalChain} />
+      )}
+      <div className="flex items-end gap-3 mt-3">
         <Button className="gap-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => onApprove(r.id)}>
           <CheckCircle className="w-4 h-4" /> Approve
         </Button>

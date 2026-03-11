@@ -10,7 +10,7 @@ export interface User {
   profilePhoto?: string; // base64 data URL
 }
 
-export type ApprovalStatus = 'pending' | 'approved' | 'declined';
+export type ApprovalStatus = 'pending' | 'approved' | 'declined' | 'reconsidered';
 
 export interface ApprovalStep {
   role: UserRole;
