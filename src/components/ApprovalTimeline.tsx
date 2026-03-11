@@ -12,7 +12,7 @@ const ApprovalTimeline = ({ chain }: { chain: ApprovalStep[] }) => {
 
   const badgeClass = (status: string) => {
     if (status === 'approved') return 'bg-success/20 text-success border-success/30';
-    if (status === 'reconsidered') return 'bg-amber-500/20 text-amber-600 border-amber-500/30';
+    if (status === 'reconsidered') return 'bg-blue-500/20 text-blue-600 border-blue-500/30';
     if (status === 'declined') return 'bg-destructive/20 text-destructive border-destructive/30';
     return 'bg-warning/20 text-warning border-warning/30';
   };

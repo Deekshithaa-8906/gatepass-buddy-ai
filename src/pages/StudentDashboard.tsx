@@ -150,7 +150,7 @@ function RequestForm({ type, user, onSubmit }: { type: 'outing' | 'leave'; user:
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const chain = getApprovalChain(form.year);
+    const chain = getApprovalChain(form.year, type);
     const approvalChain: ApprovalStep[] = chain.map(role => ({ role, status: 'pending' as const }));
 
     const request: OutingRequest = {
