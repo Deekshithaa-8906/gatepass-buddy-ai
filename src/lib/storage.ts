@@ -4,6 +4,7 @@ const REQUESTS_KEY = 'gatepass_requests';
 const COMPLAINTS_KEY = 'gatepass_complaints';
 const NOTIFICATIONS_KEY = 'gatepass_notifications';
 const PRINCIPAL_NOTIFICATIONS_KEY = 'gatepass_principal_notifications';
+const MANAGEMENT_NOTIFICATIONS_KEY = 'gatepass_management_notifications';
 
 export function getRequests(): OutingRequest[] {
   return JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
@@ -42,12 +43,13 @@ export function addComplaint(complaint: Complaint) {
   saveComplaints(all);
 }
 
-export function resolveComplaint(id: string) {
+export function resolveComplaint(id: string, resolvedBy = 'Warden') {
   const all = getComplaints();
   const idx = all.findIndex(c => c.id === id);
   if (idx !== -1) {
     all[idx].resolved = true;
     all[idx].resolvedAt = new Date().toISOString();
+    all[idx].resolvedBy = resolvedBy;
     all[idx].status = 'resolved';
     saveComplaints(all);
   }
@@ -63,7 +65,8 @@ export function escalateComplaint(id: string) {
   }
 }
 
-/** Check and auto-escalate complaints older than 3 days */
+/** Check and auto-escalate complaints older than 3 days to Principal,
+ *  and escalated complaints older than 3 more days to Management */
 export function checkAndEscalateComplaints() {
   const all = getComplaints();
   const now = Date.now();
@@ -71,14 +74,13 @@ export function checkAndEscalateComplaints() {
   let changed = false;
 
   for (const c of all) {
-    if (!c.resolved && c.status !== 'escalated') {
+    if (!c.resolved && c.status === 'pending') {
       const age = now - new Date(c.createdAt).getTime();
       if (age >= THREE_DAYS) {
         c.status = 'escalated';
         c.escalatedAt = new Date().toISOString();
         changed = true;
 
-        // Add principal notification
         addPrincipalNotification({
           id: crypto.randomUUID(),
           complaintId: c.id,
@@ -86,6 +88,26 @@ export function checkAndEscalateComplaints() {
           roomNumber: c.roomNumber,
           complaintText: c.text,
           escalatedAt: c.escalatedAt,
+          read: false,
+        });
+      }
+    }
+
+    // Escalate from Principal to Management after another 3 days
+    if (!c.resolved && c.status === 'escalated' && c.escalatedAt) {
+      const sinceEscalation = now - new Date(c.escalatedAt).getTime();
+      if (sinceEscalation >= THREE_DAYS) {
+        c.status = 'escalated_management';
+        c.escalatedToManagementAt = new Date().toISOString();
+        changed = true;
+
+        addManagementNotification({
+          id: crypto.randomUUID(),
+          complaintId: c.id,
+          studentName: c.name,
+          roomNumber: c.roomNumber,
+          complaintText: c.text,
+          escalatedAt: c.escalatedToManagementAt,
           read: false,
         });
       }
@@ -121,7 +143,6 @@ export function getPrincipalNotifications(): PrincipalNotification[] {
 
 export function addPrincipalNotification(notification: PrincipalNotification) {
   const all = getPrincipalNotifications();
-  // avoid duplicates
   if (all.some(n => n.complaintId === notification.complaintId)) return;
   all.push(notification);
   localStorage.setItem(PRINCIPAL_NOTIFICATIONS_KEY, JSON.stringify(all));
@@ -133,6 +154,27 @@ export function markPrincipalNotificationRead(id: string) {
   if (idx !== -1) {
     all[idx].read = true;
     localStorage.setItem(PRINCIPAL_NOTIFICATIONS_KEY, JSON.stringify(all));
+  }
+}
+
+// Management notifications (same shape as PrincipalNotification)
+export function getManagementNotifications(): PrincipalNotification[] {
+  return JSON.parse(localStorage.getItem(MANAGEMENT_NOTIFICATIONS_KEY) || '[]');
+}
+
+export function addManagementNotification(notification: PrincipalNotification) {
+  const all = getManagementNotifications();
+  if (all.some(n => n.complaintId === notification.complaintId)) return;
+  all.push(notification);
+  localStorage.setItem(MANAGEMENT_NOTIFICATIONS_KEY, JSON.stringify(all));
+}
+
+export function markManagementNotificationRead(id: string) {
+  const all = getManagementNotifications();
+  const idx = all.findIndex(n => n.id === id);
+  if (idx !== -1) {
+    all[idx].read = true;
+    localStorage.setItem(MANAGEMENT_NOTIFICATIONS_KEY, JSON.stringify(all));
   }
 }
 
