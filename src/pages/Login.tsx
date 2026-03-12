@@ -29,6 +29,7 @@ const Login = () => {
         hod: '/staff',
         warden: '/warden',
         principal: '/principal',
+        management: '/management',
       };
       navigate(dashMap[user.role] || '/');
     } else {

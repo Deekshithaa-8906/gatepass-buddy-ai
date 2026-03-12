@@ -82,10 +82,10 @@ const Home = () => {
           </div>
 
           {/* Role chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-4">
-            {['Student', 'Mentor', 'Advisor', 'HOD', 'Warden', 'Principal'].map(role => (
-              <div key={role} className="card-elevated text-center py-3 px-2">
-                <p className="text-sm font-semibold text-foreground">{role}</p>
+          <div className="flex justify-center flex-nowrap gap-3.5 items-center pt-4 overflow-x-auto px-2">
+            {['Student', 'Mentor', 'Advisor', 'HOD', 'Warden', 'Principal', 'Management'].map(role => (
+              <div key={role} className="card-elevated text-center py-3 px-3 min-w-[90px] flex-shrink-0 hover:scale-105 transition-transform duration-200">
+                <p className="text-sm font-semibold text-foreground whitespace-nowrap">{role}</p>
               </div>
             ))}
           </div>
