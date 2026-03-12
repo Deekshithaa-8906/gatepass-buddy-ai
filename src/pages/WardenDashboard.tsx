@@ -18,9 +18,13 @@ const StatusBadge = ({ status }: { status: string }) => {
     status === 'approved' || status === 'reconsidered' ? 'bg-success/20 text-success border-success/30' :
     status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
     status === 'resolved' ? 'bg-success/20 text-success border-success/30' :
-    status === 'escalated' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    status === 'escalated_management' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    status === 'escalated' ? 'bg-orange-500/20 text-orange-600 border-orange-500/30' :
     'bg-warning/20 text-warning border-warning/30';
-  const label = status === 'reconsidered' ? 'Reconsidered' : status;
+  const label =
+    status === 'reconsidered' ? 'Reconsidered' :
+    status === 'escalated_management' ? 'Escalated to Management' :
+    status === 'escalated' ? 'Escalated to Principal' : status;
   return <Badge className={`capitalize border ${classes}`}>{label}</Badge>;
 };
 
