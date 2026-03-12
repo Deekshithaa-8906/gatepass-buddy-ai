@@ -11,6 +11,7 @@ import StudentDashboard from "./pages/StudentDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import WardenDashboard from "./pages/WardenDashboard";
 import PrincipalDashboard from "./pages/PrincipalDashboard";
+import ManagementDashboard from "./pages/ManagementDashboard";
 import VerifyGatepass from "./pages/VerifyGatepass";
 import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/staff" element={<StaffDashboard />} />
             <Route path="/warden" element={<WardenDashboard />} />
             <Route path="/principal" element={<PrincipalDashboard />} />
+            <Route path="/management" element={<ManagementDashboard />} />
             <Route path="/verify/:id" element={<VerifyGatepass />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

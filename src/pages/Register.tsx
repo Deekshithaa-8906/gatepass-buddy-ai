@@ -16,6 +16,7 @@ const ROLES: { value: UserRole; label: string }[] = [
   { value: 'hod', label: 'HOD' },
   { value: 'warden', label: 'Warden' },
   { value: 'principal', label: 'Principal' },
+  { value: 'management', label: 'Management' },
 ];
 
 const Register = () => {

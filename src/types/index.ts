@@ -1,4 +1,4 @@
-export type UserRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal';
+export type UserRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'management';
 
 export interface User {
   id: string;
@@ -42,19 +42,23 @@ export interface OutingRequest {
   createdAt: string;
 }
 
-export type ComplaintStatus = 'pending' | 'resolved' | 'escalated';
+export type ComplaintStatus = 'pending' | 'resolved' | 'escalated' | 'escalated_management';
 
 export interface Complaint {
   id: string;
   studentId: string;
   name: string;
   roomNumber: string;
+  institution?: string;
   text: string;
   createdAt: string;
   resolved: boolean;
   resolvedAt?: string;
+  resolvedBy?: string;
   status: ComplaintStatus;
   escalatedAt?: string;
+  escalatedToManagementAt?: string;
+  underReview?: boolean;
 }
 
 export interface GatepassNotification {
