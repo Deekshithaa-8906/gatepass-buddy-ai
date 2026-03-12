@@ -109,10 +109,10 @@
 
 @layer components {
   .btn-hero {
-    @apply bg-primary text-primary-foreground px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-300 hover:opacity-90 hover:shadow-lg;
+    @apply bg-primary text-primary-foreground px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-300 hover:opacity-90 hover:shadow-lg hover:scale-105;
   }
   .btn-secondary-hero {
-    @apply bg-secondary text-secondary-foreground px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-300 hover:opacity-90;
+    @apply bg-secondary text-secondary-foreground px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-300 hover:opacity-90 hover:scale-105;
   }
   .card-elevated {
     @apply bg-card rounded-xl border p-6;
@@ -137,5 +137,11 @@
   }
   .status-declined {
     @apply bg-destructive/10 text-destructive border border-destructive/20;
+  }
+
+  /* Input focus glow */
+  input:focus, textarea:focus, select:focus, [role="combobox"]:focus {
+    @apply ring-2 ring-primary/30 border-primary transition-all duration-300;
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
   }
 }
