@@ -25,10 +25,14 @@ const StatusBadge = ({ status }: { status: string }) => {
 
 const ComplaintStatusBadge = ({ status }: { status: string }) => {
   const classes =
-    status === 'resolved' ? 'bg-[#28A745]/20 text-[#28A745] border-[#28A745]/30' :
-    status === 'escalated' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    status === 'resolved' ? 'bg-success/20 text-success border-success/30' :
+    status === 'escalated_management' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    status === 'escalated' ? 'bg-orange-500/20 text-orange-600 border-orange-500/30' :
     'bg-warning/20 text-warning border-warning/30';
-  return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
+  const label =
+    status === 'escalated_management' ? 'Escalated to Management' :
+    status === 'escalated' ? 'Escalated to Principal' : status;
+  return <Badge className={`capitalize border ${classes}`}>{label}</Badge>;
 };
 
 const StudentDashboard = () => {
