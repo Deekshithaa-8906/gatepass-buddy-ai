@@ -108,7 +108,7 @@ const StudentDashboard = () => {
               <div className="mt-6 space-y-3">
                 <h3 className="text-lg font-display font-bold text-foreground">Your Complaints</h3>
                 {complaints.map(c => (
-                  <div key={c.id} className={`card-elevated ${c.status === 'escalated' ? 'border-l-4 border-l-destructive' : c.status === 'resolved' ? 'border-l-4 border-l-[#28A745]' : ''}`}>
+                  <div key={c.id} className={`card-elevated ${c.status === 'escalated_management' ? 'border-l-4 border-l-destructive' : c.status === 'escalated' ? 'border-l-4 border-l-orange-500' : c.status === 'resolved' ? 'border-l-4 border-l-success' : ''}`}>
                     <div className="flex justify-between items-start mb-1">
                       <div>
                         <p className="text-sm font-semibold text-foreground">Room {c.roomNumber}</p>
@@ -117,8 +117,9 @@ const StudentDashboard = () => {
                       <ComplaintStatusBadge status={c.status || (c.resolved ? 'resolved' : 'pending')} />
                     </div>
                     <p className="text-sm text-muted-foreground">{c.text}</p>
-                    {c.escalatedAt && <p className="text-xs text-destructive mt-1">Escalated on {new Date(c.escalatedAt).toLocaleString()}</p>}
-                    {c.resolvedAt && <p className="text-xs text-[#28A745] mt-1">Resolved on {new Date(c.resolvedAt).toLocaleString()}</p>}
+                    {c.escalatedAt && <p className="text-xs text-orange-600 mt-1">Escalated to Principal: {new Date(c.escalatedAt).toLocaleString()}</p>}
+                    {c.escalatedToManagementAt && <p className="text-xs text-destructive mt-1">Escalated to Management: {new Date(c.escalatedToManagementAt).toLocaleString()}</p>}
+                    {c.resolvedAt && <p className="text-xs text-success mt-1">Resolved on {new Date(c.resolvedAt).toLocaleString()}{c.resolvedBy ? ` by ${c.resolvedBy}` : ''}</p>}
                   </div>
                 ))}
               </div>
