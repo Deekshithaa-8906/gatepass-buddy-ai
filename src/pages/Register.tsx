@@ -19,6 +19,10 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('student');
+  const [department, setDepartment] = useState('');
+  const [regNumber, setRegNumber] = useState('');
+  const [roomNumber, setRoomNumber] = useState('');
+  const [hostelBlock, setHostelBlock] = useState('');
   const [profilePhoto, setProfilePhoto] = useState<string>('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
