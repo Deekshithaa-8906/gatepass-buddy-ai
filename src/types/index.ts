@@ -1,5 +1,7 @@
 export type UserRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'management' | 'admin';
 
+export type AccountStatus = 'pending' | 'approved' | 'rejected';
+
 export interface User {
   id: string;
   name: string;
@@ -8,6 +10,11 @@ export interface User {
   password: string;
   role: UserRole;
   profilePhoto?: string; // base64 data URL
+  accountStatus?: AccountStatus; // for student registration approval
+  department?: string;
+  regNumber?: string;
+  roomNumber?: string;
+  hostelBlock?: string;
 }
 
 export type ApprovalStatus = 'pending' | 'approved' | 'declined' | 'reconsidered';
