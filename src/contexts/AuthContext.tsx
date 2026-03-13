@@ -37,6 +37,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       u => (u.phone === identifier || u.email === identifier) && u.password === password
     );
     if (!found) return { success: false, error: 'Invalid phone/email or password' };
+    // Block unapproved students
+    if (found.role === 'student' && found.accountStatus !== 'approved') {
+      if (found.accountStatus === 'rejected') return { success: false, error: 'Your account has been rejected by the admin.' };
+      return { success: false, error: 'Your account is pending admin approval. Please wait.' };
+    }
     setUser(found);
     if (rememberMe) {
       localStorage.setItem('gatepass_current_user', JSON.stringify(found));

@@ -11,12 +11,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const ROLES: { value: UserRole; label: string }[] = [
   { value: 'student', label: 'Student' },
-  { value: 'mentor', label: 'Mentor' },
-  { value: 'advisor', label: 'Advisor' },
-  { value: 'hod', label: 'HOD' },
-  { value: 'warden', label: 'Warden' },
-  { value: 'principal', label: 'Principal' },
-  { value: 'management', label: 'Management' },
 ];
 
 const Register = () => {
@@ -25,6 +19,10 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('student');
+  const [department, setDepartment] = useState('');
+  const [regNumber, setRegNumber] = useState('');
+  const [roomNumber, setRoomNumber] = useState('');
+  const [hostelBlock, setHostelBlock] = useState('');
   const [profilePhoto, setProfilePhoto] = useState<string>('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -52,7 +50,7 @@ const Register = () => {
       setError('Please provide at least a phone number or email');
       return;
     }
-    const result = register({ name, phone, email, password, role, profilePhoto: profilePhoto || undefined });
+    const result = register({ name, phone, email, password, role, profilePhoto: profilePhoto || undefined, accountStatus: 'pending', department, regNumber, roomNumber, hostelBlock });
     if (result.success) {
       setSuccess(true);
     } else {
@@ -65,8 +63,8 @@ const Register = () => {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="card-elevated text-center space-y-4 max-w-md w-full">
           <CheckCircle className="w-16 h-16 text-success mx-auto" />
-          <h2 className="text-2xl font-display font-bold text-foreground">Account Created Successfully!</h2>
-          <p className="text-muted-foreground">You can now login with your phone number or email on <strong>PassNTrack</strong>.</p>
+          <h2 className="text-2xl font-display font-bold text-foreground">Registration Submitted!</h2>
+          <p className="text-muted-foreground">Your account is <strong>pending admin approval</strong>. You will be able to login once approved.</p>
           <Button className="btn-hero" onClick={() => navigate('/login')}>Go to Login</Button>
         </div>
       </div>
@@ -128,15 +126,22 @@ const Register = () => {
             <Input id="password" type="password" placeholder="Create password" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
           <div className="space-y-2">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={v => setRole(v as UserRole)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ROLES.map(r => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="regNumber">Register Number</Label>
+            <Input id="regNumber" placeholder="Enter register number" value={regNumber} onChange={e => setRegNumber(e.target.value)} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="department">Department</Label>
+            <Input id="department" placeholder="Enter department" value={department} onChange={e => setDepartment(e.target.value)} required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="roomNumber">Room Number</Label>
+              <Input id="roomNumber" placeholder="Room No." value={roomNumber} onChange={e => setRoomNumber(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hostelBlock">Hostel Block</Label>
+              <Input id="hostelBlock" placeholder="Block" value={hostelBlock} onChange={e => setHostelBlock(e.target.value)} required />
+            </div>
           </div>
           <Button type="submit" className="w-full btn-hero gap-2">
             <UserPlus className="w-4 h-4" /> Create Account
