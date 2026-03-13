@@ -50,7 +50,7 @@ const Register = () => {
       setError('Please provide at least a phone number or email');
       return;
     }
-    const result = register({ name, phone, email, password, role, profilePhoto: profilePhoto || undefined });
+    const result = register({ name, phone, email, password, role, profilePhoto: profilePhoto || undefined, accountStatus: 'pending', department, regNumber, roomNumber, hostelBlock });
     if (result.success) {
       setSuccess(true);
     } else {
