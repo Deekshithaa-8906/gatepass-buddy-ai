@@ -36,6 +36,7 @@ const App = () => (
             <Route path="/warden" element={<WardenDashboard />} />
             <Route path="/principal" element={<PrincipalDashboard />} />
             <Route path="/management" element={<ManagementDashboard />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/verify/:id" element={<VerifyGatepass />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

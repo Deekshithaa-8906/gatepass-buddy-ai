@@ -126,15 +126,22 @@ const Register = () => {
             <Input id="password" type="password" placeholder="Create password" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
           <div className="space-y-2">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={v => setRole(v as UserRole)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ROLES.map(r => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="regNumber">Register Number</Label>
+            <Input id="regNumber" placeholder="Enter register number" value={regNumber} onChange={e => setRegNumber(e.target.value)} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="department">Department</Label>
+            <Input id="department" placeholder="Enter department" value={department} onChange={e => setDepartment(e.target.value)} required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="roomNumber">Room Number</Label>
+              <Input id="roomNumber" placeholder="Room No." value={roomNumber} onChange={e => setRoomNumber(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hostelBlock">Hostel Block</Label>
+              <Input id="hostelBlock" placeholder="Block" value={hostelBlock} onChange={e => setHostelBlock(e.target.value)} required />
+            </div>
           </div>
           <Button type="submit" className="w-full btn-hero gap-2">
             <UserPlus className="w-4 h-4" /> Create Account
