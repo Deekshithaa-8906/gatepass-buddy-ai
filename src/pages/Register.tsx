@@ -11,12 +11,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 const ROLES: { value: UserRole; label: string }[] = [
   { value: 'student', label: 'Student' },
-  { value: 'mentor', label: 'Mentor' },
-  { value: 'advisor', label: 'Advisor' },
-  { value: 'hod', label: 'HOD' },
-  { value: 'warden', label: 'Warden' },
-  { value: 'principal', label: 'Principal' },
-  { value: 'management', label: 'Management' },
 ];
 
 const Register = () => {
