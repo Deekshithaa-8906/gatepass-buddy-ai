@@ -63,8 +63,8 @@ const Register = () => {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="card-elevated text-center space-y-4 max-w-md w-full">
           <CheckCircle className="w-16 h-16 text-success mx-auto" />
-          <h2 className="text-2xl font-display font-bold text-foreground">Account Created Successfully!</h2>
-          <p className="text-muted-foreground">You can now login with your phone number or email on <strong>PassNTrack</strong>.</p>
+          <h2 className="text-2xl font-display font-bold text-foreground">Registration Submitted!</h2>
+          <p className="text-muted-foreground">Your account is <strong>pending admin approval</strong>. You will be able to login once approved.</p>
           <Button className="btn-hero" onClick={() => navigate('/login')}>Go to Login</Button>
         </div>
       </div>
