@@ -12,6 +12,7 @@ import StaffDashboard from "./pages/StaffDashboard";
 import WardenDashboard from "./pages/WardenDashboard";
 import PrincipalDashboard from "./pages/PrincipalDashboard";
 import ManagementDashboard from "./pages/ManagementDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 import VerifyGatepass from "./pages/VerifyGatepass";
 import ForgotPassword from "./pages/ForgotPassword";
 import NotFound from "./pages/NotFound";
