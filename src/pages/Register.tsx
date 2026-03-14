@@ -1,29 +1,17 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { UserRole } from '@/types';
 import { MapPin, UserPlus, CheckCircle, ArrowLeft, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-
-const ROLES: { value: UserRole; label: string }[] = [
-  { value: 'student', label: 'Student' },
-  { value: 'mentor', label: 'Mentor' },
-  { value: 'advisor', label: 'Advisor' },
-  { value: 'hod', label: 'HOD' },
-  { value: 'warden', label: 'Warden' },
-  { value: 'principal', label: 'Principal' },
-];
 
 const Register = () => {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('student');
   const [profilePhoto, setProfilePhoto] = useState<string>('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -47,11 +35,11 @@ const Register = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!phone && !email) {
-      setError('Please provide at least a phone number or email');
+    if (!email.trim()) {
+      setError('Email is required');
       return;
     }
-    const result = register({ name, phone, email, password, role, profilePhoto: profilePhoto || undefined });
+    const result = register({ name, phone, email, password, role: 'student', profilePhoto: profilePhoto || undefined });
     if (result.success) {
       setSuccess(true);
     } else {
@@ -65,7 +53,7 @@ const Register = () => {
         <div className="card-elevated text-center space-y-4 max-w-md w-full">
           <CheckCircle className="w-16 h-16 text-success mx-auto" />
           <h2 className="text-2xl font-display font-bold text-foreground">Account Created Successfully!</h2>
-          <p className="text-muted-foreground">You can now login with your phone number or email on <strong>PassNTrack</strong>.</p>
+          <p className="text-muted-foreground">Your account is ready. Login with your email and password on <strong>PassNTrack</strong>.</p>
           <Button className="btn-hero" onClick={() => navigate('/login')}>Go to Login</Button>
         </div>
       </div>
@@ -84,7 +72,7 @@ const Register = () => {
             <span className="text-xl font-display font-bold">PassNTrack</span>
           </div>
           <h1 className="text-3xl font-display font-bold text-foreground">Create Account</h1>
-          <p className="text-muted-foreground">Register for PassNTrack gatepass system</p>
+          <p className="text-muted-foreground">Only admin-approved emails can register. Contact admin if your email isn't listed.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="card-elevated space-y-4">
@@ -126,17 +114,7 @@ const Register = () => {
             <Label htmlFor="password">Password</Label>
             <Input id="password" type="password" placeholder="Create password" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
-          <div className="space-y-2">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={v => setRole(v as UserRole)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ROLES.map(r => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <p className="text-xs text-muted-foreground">Your role is pre-assigned by admin based on your email.</p>
           <Button type="submit" className="w-full btn-hero gap-2">
             <UserPlus className="w-4 h-4" /> Create Account
           </Button>

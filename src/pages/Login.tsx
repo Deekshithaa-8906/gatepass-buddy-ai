@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@/contexts/AuthContext';
 import { MapPin, LogIn, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -33,6 +34,26 @@ const Login = () => {
       navigate(dashMap[user.role] || '/');
     } else {
       setError(result.error || 'Login failed');
+    }
+  };
+
+  const handleGoogleSuccess = (credentialResponse: any) => {
+    if (credentialResponse.credential) {
+      const result = loginWithGoogle(credentialResponse.credential);
+      if (result.success) {
+        const user = JSON.parse(localStorage.getItem('gatepass_current_user') || '{}');
+        const dashMap: Record<string, string> = {
+          student: '/student',
+          mentor: '/staff',
+          advisor: '/staff',
+          hod: '/staff',
+          warden: '/warden',
+          principal: '/principal',
+        };
+        navigate(dashMap[user.role] || '/');
+      } else {
+        setError(result.error || 'Google login failed');
+      }
     }
   };
 
@@ -95,7 +116,36 @@ const Login = () => {
           <p className="text-center text-sm text-muted-foreground">
             Don't have an account? <Link to="/register" className="text-primary font-medium hover:underline">Create Account</Link>
           </p>
+          <p className="text-center text-xs text-muted-foreground">
+            Admin? <Link to="/admin/login" className="text-primary font-medium hover:underline">Login to manage access</Link>
+          </p>
         </form>
+
+        {/* Google Sign-In */}
+        <div className="space-y-4">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+            </div>
+          </div>
+          
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => {
+                setError('Google sign-in failed. Please try again.');
+              }}
+              useOneTap
+              theme="outline"
+              size="large"
+              text="signin_with"
+              shape="rectangular"
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

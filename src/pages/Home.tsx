@@ -79,6 +79,7 @@ const Home = () => {
               <UserPlus className="w-5 h-5" />
               Create Account
             </Button>
+
           </div>
 
           {/* Role chips */}
