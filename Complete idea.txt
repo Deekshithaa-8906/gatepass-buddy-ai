@@ -1,0 +1,36 @@
+Act as a senior technical developer with current ai trends . I will share my project details , review this and tell me exactly how to implement this in a structured manner like a production level web application. Also you need to suggest me the current trending ai tools to make the work easier. This project is completely for my college hostel students ,
+1) my college hostel students has to get signature in gatepass from mentors, advisor , hod , and finally hostel warden to get outpass for leave
+2)Also for outing ,they need to get sign from the hostel warden .
+3)And they can also raise their complaints 
+So we are going to make these manual work to a digital process.
+This webapp should contain admin login , student login , Mentor login , Advisor login , HOD login , Warden login , Principal login .
+
+Feature in each roles:
+
+1) Admin -> The admin has the access to add or remove the all other person in other roles. Admin can manually add the college domain mail Id of only the hostel students and the add the mails of the other roles . Also if someone request access to create account with a mail Id not listed in the allowed accounts in admin page , then the admin can review that mail and approve or reject the request . Also admin can temporarily block the login of the approved users if there is an issue , and unblock the user if issue resolved by editing the permission of the approved user .  The admin can the edit the email of the approved user by clicking the user profile in the approved users list and then save them.
+	Note : Only approved users can create account with only the approved mail Id.
+Here we should authenticate users with correct passwords that they provide during their account creation with the approved mail Id. 
+
+2)Student -> The student should initially enter their email in the create account page(enter email -> verify) , then the system should check if the email is in the approved user list -> if not in the approved users list a pop up should appear with the text fields(name , email , role->dropdown(student,Mentor,Advisor,HOD,Warden,Principal) and a request approval button -> if user exists then navigate to onboarding details page , it contains textfields(Name , mobile number,parent number , role (already filled with fixed value given in the admin page) , male or female ,Institute , year , department , register number , hostel block , room number . ->Student Dashboard - outing pass request page , leave pass request page , complaint page , status page ( status of outing , leave , complaint ) , Inbox page ( receives notification on each progress of the status (status of leave , outing , complain) , Profile page - contains the info the student details filled during the onboarding process also the "faculty incharge details" textfields-(mentor-dropdown(names of the mentor registered in the year-department of the student) , Advisor - dropdown(names of the advisor registered in the year-department of the student) , Hod - a(lready filled with the name of the Hod registered in the department of the student) , Principal - (already filled with the name of the Hod registered in the department of the student) . The student can edit the hostel block, room number . Whenever the students login navigate to the dashboard.
+
+3)Mentor -> Receives the requests from the student -> opens the request , reviews the info of the student requested -> if accepted then the request is forwarded to the Advisor , if rejected then reason textbox appears (Enter the reason -> send) the reason should be received to the student with the notification of rejection . Also the rejected requests has the option (reviewed and accepted) .
+
+4)Advisor -> Receives the requests from the student after approval of the mentor -> opens the request , reviews the info of the student requested -> if accepted then the request is forwarded to the Advisor , if rejected then reason textbox appears (Enter the reason -> send) the reason should be received to the student with the notification of rejection . Also the rejected requests has the option (reviewed and accepted) .
+
+5)Hod -> Receives the requests from the student after approval of the mentor and advisor-> opens the request , reviews the info of the student requested -> if accepted then the request is forwarded to the Advisor , if rejected then reason textbox appears (Enter the reason -> send) the reason should be received to the student with the notification of rejection . Also the rejected requests has the option (reviewed and accepted) .
+
+6)Warden -> Receives the requests from the student after approval of the mentor and advisor and Hod-> opens the request , reviews the info of the student requested -> if accepted then the request is forwarded to the Advisor , if rejected then reason textbox appears (Enter the reason -> send) the reason should be received to the student with the notification of rejection . Also the rejected requests has the option (reviewed and accepted)
+Also has a separed page for complaints , if the complain is not reviewed within 7 days then it is automatically forwaded to the principal , else if reviewed complaint is resolved (Solved button) , else the warden can forward to principal for furthur clarification (Forward button)
+
+7)Principal -> Receives the requests from the student after approval of the mentor and advisor and Hod-> opens the request , reviews the info of the student requested -> if accepted then the request is forwarded to the Advisor , if rejected then reason textbox appears (Enter the reason -> send) the reason should be received to the student with the notification of rejection . Also the rejected requests has the option (reviewed and accepted) .
+A separate page for complaint forwarded from warden dashboard , the complain is labelled as reviewed if it is reviewed and forwarded by the warden , else labelled as not reviewed if the complaint is automatically forwarded .
+
+
+
+
+Workflow of each request :
+
+1) Leave form -> request Mentor - Advisor - Hod - Warden -> Leave outpass generated and visible till the specified date 
+2) Outing form -> request Warden - outing outpass genrated visible till the specified time 
+3) Complaint -> request warden (if complaint accepted and issue resolved - Display as solved in both student complain status and the warden dashbord , else if the complain needs pricipals consideration the warden can forward to the pricipal , else if it not reviewed by the warden for 7 days then automatically forwarded to the principal) - complaint goes to  Principal  
+

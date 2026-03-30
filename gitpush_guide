@@ -1,0 +1,76 @@
+1️⃣ Fetch the latest branches from GitHub
+
+First make sure your local repo knows about the new branch.
+
+git fetch origin
+
+2️⃣ Switch to the backend-api branch
+
+If the branch exists on GitHub:
+
+git checkout backend-api
+
+
+If it gives error, use:
+
+git checkout -b backend-api origin/backend-api
+
+
+This links your local branch with the GitHub branch.
+
+3️⃣ Add your changes
+
+Now stage your files.
+
+git add .
+
+4️⃣ Commit the changes
+git commit -m "Backend API implementation"
+
+5️⃣ Push to the backend-api branch
+git push origin backend-api
+
+
+Your code will now go to:
+
+repo
+ ├── main
+ └── backend-api   ← your code
+
+6️⃣ Later create a Pull Request
+
+On GitHub:
+
+backend-api → main
+
+
+This merges your backend code into the main project safely.
+
+✅ Quick workflow for you
+
+git checkout backend-api
+git add .
+git commit -m "backend update"
+git push origin backend-api
+
+
+💡 Small tip for your multi-agent hackathon project:
+Use branches like:
+
+backend-api
+frontend-ui
+ai-agents
+database
+
+
+This keeps the repo clean and conflict-free.
+
+
+
+
+
+Google auth 
+771025712912-b4ttft63icujd7ljbcstk9is3823vrov.apps.googleusercontent.com
+
+
+771025712912-b4ttft63icujd7ljbcstk9is3823vrov.apps.googleusercontent.com
