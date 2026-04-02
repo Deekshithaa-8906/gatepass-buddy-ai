@@ -18,18 +18,19 @@ const ComplaintStatusBadge = ({ status }: { status: string }) => {
 };
 
 const PrincipalDashboard = () => {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [notifications, setNotifications] = useState<PrincipalNotification[]>([]);
+  const actorName = profile?.full_name || profile?.email || 'Principal';
 
   useEffect(() => {
-    if (!user || user.role !== 'principal') { navigate('/'); return; }
+    if (!profile || profile.role !== 'principal') { navigate('/'); return; }
     checkAndEscalateComplaints();
     refreshData();
-  }, [user, navigate]);
+  }, [profile, navigate]);
 
-  if (!user || user.role !== 'principal') return null;
+  if (!profile || profile.role !== 'principal') return null;
 
   const refreshData = () => {
     setComplaints(getComplaints().filter(c => c.status === 'escalated'));
@@ -52,7 +53,7 @@ const PrincipalDashboard = () => {
             <span className="font-display font-bold text-lg">PassNTrack</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm opacity-90">{user.name} (PRINCIPAL)</span>
+            <span className="text-sm opacity-90">{actorName} (PRINCIPAL)</span>
             <ProfileDropdown />
           </div>
         </div>

@@ -1,104 +1,77 @@
-import { useNavigate } from 'react-router-dom';
-import { LogIn, UserPlus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import snsLogo from '@/assets/sns-logo.png';
-import campusBg from '@/assets/sns-campus-bg.png';
+import React from 'react';
+import { LogIn, UserPlus, GraduationCap } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import bgImage from '../assets/sns-campus-bg.png';
 
-const Home = () => {
-  const navigate = useNavigate();
-
+export function Home() {
   return (
-    <div className="min-h-screen flex flex-col bg-background relative">
-      {/* Background image with overlay */}
-      <div className="fixed inset-0 z-0">
-        <img src={campusBg} alt="" className="w-full h-full object-cover opacity-50" />
-      </div>
-      {/* Content above background */}
-      <div className="relative z-10 min-h-screen flex flex-col">
+    <div className="min-h-screen relative flex flex-col font-sans overflow-hidden">
+      {/* Background Image Setup */}
+      <div
+        className="absolute inset-0 bg-cover bg-center z-0 transition-transform duration-1000 scale-105"
+        style={{ backgroundImage: `url(${bgImage})` }}
+      />
+      {/* Subtle Color Overlay to ensure readability while keeping the image highly visible */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/40 via-transparent to-black/20 z-0" />
 
-      {/* 1️⃣ Official SNS Institutional Header */}
-      <div className="w-full bg-white border-b border-border shadow-sm">
-        <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-4">
-          {/* Logo placeholder */}
-          <div className="flex-shrink-0 h-14 w-14 flex items-center justify-center">
-            <img src={snsLogo} alt="SNS Institutions Logo" className="h-14 w-14 object-contain" />
+      {/* Header - Top Application Name */}
+      <header className="relative z-10 w-full px-8 py-6 flex justify-between items-center bg-[#ffececab]">
+        <Link to="/" className="flex items-center gap-2 group cursor-pointer">
+          <div className="bg-[#CD0000] p-1.5 rounded-lg shadow-sm transition-transform group-hover:scale-105">
+            <GraduationCap className="w-5 h-5 text-white" />
           </div>
-          {/* Center text */}
-          <div className="flex flex-col leading-tight">
-            <span className="text-base sm:text-lg font-bold text-foreground tracking-wide">
-              SNS Institutions
-            </span>
-            <span className="text-xs sm:text-sm text-muted-foreground font-medium">
-              Hostel Management System
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2️⃣ PassNTrack Navbar */}
-      <header className="gradient-hero text-primary-foreground py-3 px-6 shadow-md">
-        <div className="max-w-6xl mx-auto flex items-center gap-3">
-          <span className="text-xl font-display font-bold tracking-tight">PassNTrack</span>
-        </div>
+          <span className="text-xl font-bold tracking-tight text-gray-900 drop-shadow-sm">PassN<span className="text-[#CD0000]">Track&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span></span>
+        </Link>
       </header>
 
-      {/* 3️⃣ Centered Title Section */}
-      <section className="bg-muted/40 border-b border-border py-10 px-6 text-center">
-        <h1 className="text-4xl sm:text-[42px] font-display font-extrabold text-foreground leading-tight tracking-tight">
-          SNS Institutions – Hostel Management System
-        </h1>
-      </section>
-
-      {/* 4️⃣ Welcome / Login Section */}
-      <main className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="max-w-2xl w-full text-center space-y-8">
-
-          <h2 className="text-3xl font-display font-bold text-foreground">
-            Welcome
-          </h2>
-
-          <p className="text-base font-bold text-foreground max-w-md mx-auto">
-            Manage outing passes, leave requests, and complaints — streamlined for students, mentors, and administrators.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              className="btn-hero gap-2"
-              onClick={() => navigate('/login')}
-            >
-              <LogIn className="w-5 h-5" />
-              Login
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-all px-8 py-3 text-lg font-semibold"
-              onClick={() => navigate('/register')}
-            >
-              <UserPlus className="w-5 h-5" />
-              Create Account
-            </Button>
-
+      {/* Main Content Area */}
+      <main className="relative z-10 flex-grow flex items-center justify-center p-6 sm:p-12">
+        <div className="max-w-2xl w-full bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 text-center flex flex-col items-center relative overflow-hidden transition-all duration-300 hover:bg-white/20 m-[2px] p-[30px]">
+          
+          <div className="space-y-3">
+            <h1 className="font-bold text-[#CD0000] tracking-tight drop-shadow-sm text-[40px] px-[0px] py-[10px]">
+              SNS Institutions
+              <span className="block font-semibold text-gray-900 mt-1 text-[28px]">
+                Hostel Management System
+              </span>
+            </h1>
           </div>
 
-          {/* Role chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-4">
-            {['Student', 'Mentor', 'Advisor', 'HOD', 'Warden', 'Principal'].map(role => (
-              <div key={role} className="card-elevated text-center py-3 px-2">
-                <p className="text-sm font-semibold text-foreground">{role}</p>
-              </div>
-            ))}
+          <p 
+            className="leading-relaxed max-w-lg px-[0px] py-[10px] text-[#030303] text-[17px]"
+            style={{ 
+              fontFamily: '"Caviar Dreams", "Quicksand", "Jost", sans-serif', 
+              fontWeight: 400,
+              letterSpacing: '0.5px'
+            }}
+          >
+            Manage outing passes, leave requests, and complaints - streamlined for students, mentors, and administrators.
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full pt-4">
+            <Link 
+              to="/login"
+              className="group flex items-center justify-center gap-2 bg-[#CD0000] hover:bg-[#a80000] text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg w-full sm:w-48 active:scale-95 text-center text-[14px] px-[34px] py-[12px]"
+            >
+              <LogIn className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+              Login
+            </Link>
+            <Link 
+              to="/create-account"
+              className="group flex items-center justify-center gap-2 bg-white/50 hover:bg-white/70 text-gray-900 border border-gray-300 px-8 py-3 rounded-lg font-medium transition-all shadow-sm hover:shadow-md w-full sm:w-48 active:scale-95 backdrop-blur-sm text-[14px]"
+            >
+              <UserPlus className="w-4 h-4 transition-transform group-hover:scale-110" />
+              Create Account
+            </Link>
           </div>
         </div>
       </main>
 
-      <footer className="py-4 text-center text-sm text-foreground font-bold border-t">
-        © 2026 PassNTrack — SNS Institutions Hostel Management System
+      {/* Simple Footer */}
+      <footer className="relative z-10 text-center py-6 font-medium text-gray-800/70 drop-shadow-sm text-[14px] text-[#ffffff]">
+        © {new Date().getFullYear()} SNS Institutions. All rights reserved.
       </footer>
-      </div>
     </div>
   );
-};
+}
 
-export default Home;

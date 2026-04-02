@@ -21,40 +21,42 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 const StaffDashboard = () => {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const [requests, setRequests] = useState<OutingRequest[]>([]);
   const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({});
 
   const staffRoles: UserRole[] = ['mentor', 'advisor', 'hod'];
+  const currentRole = (profile?.role as UserRole | undefined);
+  const actorName = profile?.full_name || profile?.email || 'Staff';
 
   useEffect(() => {
-    if (!user || !staffRoles.includes(user.role)) { navigate('/'); return; }
+    if (!currentRole || !staffRoles.includes(currentRole)) { navigate('/'); return; }
     refreshRequests();
-  }, [user, navigate]);
+  }, [currentRole, navigate]);
 
-  if (!user || !staffRoles.includes(user.role)) return null;
+  if (!currentRole || !staffRoles.includes(currentRole)) return null;
 
   const refreshRequests = () => {
     setRequests(getRequests());
   };
 
-  const pending = requests.filter(r => r.currentApprover === user.role && r.status === 'pending');
+  const pending = requests.filter(r => r.currentApprover === currentRole && r.status === 'pending');
   const pendingOuting = pending.filter(r => r.type === 'outing');
   const pendingLeave = pending.filter(r => r.type === 'leave');
-  const history = requests.filter(r => r.approvalChain.some(s => s.role === user.role && s.status !== 'pending'));
+  const history = requests.filter(r => r.approvalChain.some(s => s.role === currentRole && s.status !== 'pending'));
 
   // Find requests declined by this user that can be reconsidered
   const declinedByMe = requests.filter(r => {
-    const step = r.approvalChain.find(s => s.role === user.role);
+    const step = r.approvalChain.find(s => s.role === currentRole);
     return step && step.status === 'declined' && r.status === 'declined' && r.currentApprover === 'declined';
   });
 
   const handleApprove = (id: string) => {
     updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === user.role);
+      const stepIdx = r.approvalChain.findIndex(s => s.role === currentRole);
       if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: user.name, timestamp: new Date().toISOString() };
+      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: actorName, timestamp: new Date().toISOString() };
       const nextStep = r.approvalChain[stepIdx + 1];
       if (nextStep) {
         r.currentApprover = nextStep.role;
@@ -71,9 +73,9 @@ const StaffDashboard = () => {
     const reason = declineReasons[id] || 'No reason provided';
     let declinedRequest: OutingRequest | null = null;
     updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === user.role);
+      const stepIdx = r.approvalChain.findIndex(s => s.role === currentRole);
       if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: user.name, reason, timestamp: new Date().toISOString() };
+      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: actorName, reason, timestamp: new Date().toISOString() };
       r.currentApprover = 'declined';
       r.status = 'declined';
       declinedRequest = { ...r };
@@ -82,7 +84,7 @@ const StaffDashboard = () => {
 
     if (declinedRequest) {
       const req = declinedRequest as OutingRequest;
-      const roleName = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+      const roleName = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
       addNotification({
         id: crypto.randomUUID(),
         requestId: req.id,
@@ -99,12 +101,12 @@ const StaffDashboard = () => {
 
   const handleReconsider = (id: string) => {
     updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === user.role);
+      const stepIdx = r.approvalChain.findIndex(s => s.role === currentRole);
       if (stepIdx === -1) return r;
       r.approvalChain[stepIdx] = {
         ...r.approvalChain[stepIdx],
         status: 'reconsidered',
-        approvedBy: user.name,
+        approvedBy: actorName,
         reason: undefined,
         timestamp: new Date().toISOString(),
       };
@@ -123,7 +125,7 @@ const StaffDashboard = () => {
     // Notify student
     const req = getRequests().find(r => r.id === id);
     if (req) {
-      const roleName = user.role.charAt(0).toUpperCase() + user.role.slice(1);
+      const roleName = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
       addNotification({
         id: crypto.randomUUID(),
         requestId: req.id,
@@ -147,7 +149,7 @@ const StaffDashboard = () => {
             <span className="font-display font-bold text-lg">PassNTrack</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm opacity-90">{user.name} ({user.role.toUpperCase()})</span>
+            <span className="text-sm opacity-90">{actorName} ({currentRole.toUpperCase()})</span>
             <ProfileDropdown />
           </div>
         </div>
@@ -158,7 +160,7 @@ const StaffDashboard = () => {
           <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/')}>
             <ArrowLeft className="w-4 h-4" /> Back
           </Button>
-          <h1 className="text-3xl font-display font-bold text-foreground capitalize">{user.role} Dashboard</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground capitalize">{currentRole} Dashboard</h1>
         </div>
 
         <Tabs defaultValue="outing" className="space-y-6">

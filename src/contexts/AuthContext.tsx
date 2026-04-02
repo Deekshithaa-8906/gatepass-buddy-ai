@@ -1,137 +1,149 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, UserRole } from '@/types';
-import { getAllowedUserByEmail, normalizeEmail } from '@/lib/access-control';
+import { supabase } from '@/lib/supabase';
+import { User as SupabaseUser } from '@supabase/supabase-js';
+
+export type UserStatus = 'pending' | 'approved' | 'active';
+export type UserRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'admin';
+
+interface Profile {
+  id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  status: UserStatus;
+  mobile_number?: string;
+  register_number?: string;
+  class_details?: string;
+  parent_name?: string;
+  parent_mobile?: string;
+  gender?: string;
+  institute?: string;
+  year_of_study?: string;
+  hostel_block?: string;
+  room_number?: string;
+  department?: string;
+  mentor?: string;
+  advisor?: string;
+  hod?: string;
+  principal?: string;
+  password_created?: boolean;
+  onboarding_complete?: boolean;
+  access_status?: string;
+  account_status?: string;
+}
 
 interface AuthContextType {
-  user: User | null;
-  login: (identifier: string, password: string, rememberMe?: boolean) => { success: boolean; error?: string };
-  loginWithGoogle: (credential: string) => { success: boolean; error?: string };
-  register: (data: Omit<User, 'id'>) => { success: boolean; error?: string };
-  logout: () => void;
+  user: SupabaseUser | null;
+  profile: Profile | null;
+  loading: boolean;
+  refreshProfile: () => Promise<void>;
+  signIn: (email: string) => Promise<{ error: any }>;
+  signOut: () => Promise<{ error: any }>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
-
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
-};
-
-function getUsers(): User[] {
-  return JSON.parse(localStorage.getItem('gatepass_users') || '[]');
-}
-function saveUsers(users: User[]) {
-  localStorage.setItem('gatepass_users', JSON.stringify(users));
-}
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem('gatepass_current_user') || sessionStorage.getItem('gatepass_current_user');
-    if (saved) setUser(JSON.parse(saved));
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user?.email) {
+        fetchProfile(session.user.email);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const newUser = session?.user ?? null;
+      setUser(newUser);
+      if (newUser?.email) {
+        fetchProfile(newUser.email);
+      } else {
+        setProfile(null);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = (identifier: string, password: string, rememberMe = false) => {
-    const maybeEmail = identifier.includes('@') ? normalizeEmail(identifier) : '';
-    if (maybeEmail) {
-      const allowed = getAllowedUserByEmail(maybeEmail);
-      if (!allowed || !allowed.canLogin) {
-        return { success: false, error: 'This email is not on the approved list. Please contact admin.' };
-      }
-    }
-
-    const users = getUsers();
-    const found = users.find(
-      u => (u.phone === identifier || u.email === identifier) && u.password === password
-    );
-    if (!found) return { success: false, error: 'Invalid phone/email or password' };
-    setUser(found);
-    if (rememberMe) {
-      localStorage.setItem('gatepass_current_user', JSON.stringify(found));
-    } else {
-      sessionStorage.setItem('gatepass_current_user', JSON.stringify(found));
-    }
-    return { success: true };
-  };
-
-  const loginWithGoogle = (credential: string) => {
+  const fetchProfile = async (userEmail: string) => {
     try {
-      // Decode JWT token from Google
-      const payload = JSON.parse(atob(credential.split('.')[1]));
-      const googleEmail = normalizeEmail(payload.email || '');
-      if (!googleEmail) {
-        return { success: false, error: 'Google account email is missing' };
-      }
+      const { data, error } = await supabase
+        .from('user_directory')
+        .select('id, email, full_name, role, status, mobile_number, register_number, class_details, parent_name, parent_mobile, gender, institute, year_of_study, hostel_block, room_number, department, mentor, advisor, hod, principal, password_created, onboarding_complete, access_status, account_status')
+        .eq('email', userEmail)
+        .maybeSingle();
 
-      const allowed = getAllowedUserByEmail(googleEmail);
-      if (!allowed || !allowed.canLogin) {
-        return { success: false, error: 'This email is not on the approved list. Please contact admin.' };
+      if (error) {
+        console.error('Error fetching profile:', error);
+      } else {
+        setProfile((data ?? null) as Profile | null);
       }
-      
-      // Create or find user based on Google email
-      const users = getUsers();
-      let found = users.find(u => normalizeEmail(u.email) === googleEmail);
-      
-      if (!found) {
-        // Auto-register new user from Google
-        found = {
-          id: crypto.randomUUID(),
-          name: payload.name,
-          email: googleEmail,
-          phone: '',
-          role: allowed.role as UserRole,
-          password: '',
-        };
-        users.push(found);
-        saveUsers(users);
-      } else if (found.role !== allowed.role) {
-        found.role = allowed.role;
-        saveUsers(users);
-      }
-      
-      setUser(found);
-      localStorage.setItem('gatepass_current_user', JSON.stringify(found));
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: 'Google login failed' };
+    } catch (err) {
+      console.error('Unexpected error fetching profile:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const register = (data: Omit<User, 'id'>) => {
-    const email = normalizeEmail(data.email || '');
-    if (!email) {
-      return { success: false, error: 'Email is required for registration' };
+  const signIn = async (email: string) => {
+    // Check if user is in user_directory first
+    const { data: existingUser, error: searchError } = await supabase
+      .from('user_directory')
+    .select('status')
+      .eq('email', email)
+    .maybeSingle();
+
+    if (searchError && searchError.code !== 'PGRST116') {
+      return { error: searchError };
     }
 
-    const allowed = getAllowedUserByEmail(email);
-    if (!allowed || !allowed.canRegister) {
-      return { success: false, error: 'This email is not on the approved list. Please contact admin.' };
-    }
+    // Attempt OTP sign in
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/verification-success`,
+      },
+    });
 
-    const users = getUsers();
-    if (users.find(u => u.phone === data.phone)) {
-      return { success: false, error: 'Phone number already registered' };
-    }
-    if (users.find(u => normalizeEmail(u.email) === email)) {
-      return { success: false, error: 'Email already registered' };
-    }
-    const newUser: User = { ...data, email, role: allowed.role, id: crypto.randomUUID() };
-    users.push(newUser);
-    saveUsers(users);
-    return { success: true };
+    return { error };
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('gatepass_current_user');
-    sessionStorage.removeItem('gatepass_current_user');
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    return { error };
+  };
+
+  const refreshProfile = async () => {
+    const { data } = await supabase.auth.getUser();
+    const userEmail = data.user?.email;
+    if (!userEmail) {
+      setProfile(null);
+      return;
+    }
+    await fetchProfile(userEmail);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginWithGoogle, register, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, refreshProfile, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 };
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+

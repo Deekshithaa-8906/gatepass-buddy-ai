@@ -1,0 +1,233 @@
+-- PassNTrack Supabase Schema Initialization
+-- Run this entire script in the Supabase SQL Editor
+-- 1. Create Custom Enum Types
+CREATE TYPE user_role AS ENUM ('student', 'mentor', 'advisor', 'hod', 'warden', 'principal', 'admin');
+CREATE TYPE access_status_enum AS ENUM ('pending_approval', 'approved', 'rejected');
+CREATE TYPE account_status_enum AS ENUM ('inactive', 'active', 'suspended');
+CREATE TYPE gender_enum AS ENUM ('male', 'female');
+CREATE TYPE request_type_enum AS ENUM ('outing', 'leave');
+CREATE TYPE request_status_enum AS ENUM ('pending', 'approved', 'declined');
+CREATE TYPE approval_status_enum AS ENUM ('pending', 'approved', 'declined', 'reconsidered');
+CREATE TYPE complaint_status_enum AS ENUM ('pending', 'resolved', 'escalated');
+-- 2. Create Tables
+-- THE GATEKEEPER: Controls access before Auth creation and dashboard display lists
+CREATE TABLE user_directory (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email TEXT UNIQUE NOT NULL,
+    role user_role NOT NULL,
+    access_status access_status_enum NOT NULL DEFAULT 'pending_approval',
+    account_status account_status_enum NOT NULL DEFAULT 'inactive',
+    department TEXT, -- Populated after student onboarding
+    room_number TEXT, -- Populated after student onboarding
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+-- PROFILES: Linked 1:1 with Supabase Auth users
+CREATE TABLE profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    directory_id UUID REFERENCES user_directory(id),
+    email TEXT UNIQUE NOT NULL,
+    role user_role NOT NULL,
+    full_name TEXT NOT NULL,
+    mobile_number TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+-- STUDENT DETAILS: Populated during onboarding
+CREATE TABLE student_details (
+    id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+    parent_number TEXT NOT NULL,
+    gender gender_enum NOT NULL,
+    institute TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    department TEXT NOT NULL,
+    register_number TEXT UNIQUE NOT NULL,
+    hostel_block TEXT NOT NULL,
+    room_number TEXT NOT NULL,
+    mentor_id UUID REFERENCES profiles(id),
+    advisor_id UUID REFERENCES profiles(id),
+    hod_id UUID REFERENCES profiles(id),
+    principal_id UUID REFERENCES profiles(id)
+);
+-- REQUESTS (Outing/Leave Passes)
+CREATE TABLE requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID REFERENCES profiles(id) NOT NULL,
+    type request_type_enum NOT NULL,
+    destination TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    out_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+    in_datetime TIMESTAMP WITH TIME ZONE NOT NULL,
+    status request_status_enum NOT NULL DEFAULT 'pending',
+    current_approver_role user_role NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+-- REQUEST APPROVALS (Workflow History Chain)
+CREATE TABLE request_approvals (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_id UUID REFERENCES requests(id) ON DELETE CASCADE NOT NULL,
+    approver_id UUID REFERENCES profiles(id),
+    role_at_time user_role NOT NULL,
+    status approval_status_enum NOT NULL,
+    reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+-- COMPLAINTS
+CREATE TABLE complaints (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID REFERENCES profiles(id) NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status complaint_status_enum NOT NULL DEFAULT 'pending',
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    escalated_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+-- NOTIFICATIONS (Inbox)
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES profiles(id) NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+-- 3. Row Level Security (RLS) Setup
+-- Enable RLS on all tables
+ALTER TABLE user_directory ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_details ENABLE ROW LEVEL SECURITY;
+ALTER TABLE requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE request_approvals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE complaints ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+-- Basic Admin Policies (Admin has full access)
+-- In a real scenario, you would check if auth.uid() matches a profile with role 'admin'
+CREATE POLICY "Admins have full access to User Directory" ON user_directory FOR ALL USING (
+    (SELECT role FROM profiles WHERE id = auth.uid()) = 'admin'
+);
+-- Profiles Policies
+CREATE POLICY "Users can view all profiles" ON profiles FOR SELECT USING (true);
+CREATE POLICY "Users can update their own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+-- Student Details Policies
+CREATE POLICY "Users can view student details" ON student_details FOR SELECT USING (true);
+CREATE POLICY "Students can insert their own details" ON student_details FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Students can update their own details" ON student_details FOR UPDATE USING (auth.uid() = id);
+-- Requests Policies
+CREATE POLICY "Anyone can view requests" ON requests FOR SELECT USING (true);
+CREATE POLICY "Students can draft requests" ON requests FOR INSERT WITH CHECK (auth.uid() = student_id);
+-- Notifications
+CREATE POLICY "Users can view their own notifications" ON notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can edit their own notifications" ON notifications FOR UPDATE USING (auth.uid() = user_id);
+-- 4. Enable Supabase Realtime Broadcasting
+-- This ensures the dashboard updates instantly when changes happen
+ALTER PUBLICATION supabase_realtime ADD TABLE requests;
+ALTER PUBLICATION supabase_realtime ADD TABLE request_approvals;
+ALTER PUBLICATION supabase_realtime ADD TABLE complaints;
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+ALTER PUBLICATION supabase_realtime ADD TABLE user_directory;
+
+DROP POLICY IF EXISTS "Anyone can request an account" ON public.user_directory;
+DROP POLICY IF EXISTS "Anyone can insert pending requests" ON public.user_directory;
+
+CREATE POLICY "Users can insert their own pending requests" ON public.user_directory
+FOR INSERT TO authenticated
+WITH CHECK (
+    access_status = 'pending_approval' 
+    AND email = auth.jwt() ->> 'email'
+);
+
+-- Run this snippet in your Supabase SQL Editor
+CREATE TABLE approval_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL,
+  department TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- Enable Row Level Security
+ALTER TABLE approval_requests ENABLE ROW LEVEL SECURITY;
+-- Allow public inserts (so user can register pending requests without full auth)
+CREATE POLICY "Public can insert approval requests"
+ON approval_requests FOR INSERT WITH CHECK (true);
+-- Allow authenticated users to view
+CREATE POLICY "Authenticated users can read approval requests"
+ON approval_requests FOR SELECT USING (true);
+-- Allow authenticated users to update
+CREATE POLICY "Authenticated users can update approval requests"
+ON approval_requests FOR UPDATE USING (true);
+-- Enable Realtime for admin dashboard listeners
+alter publication supabase_realtime add table approval_requests;
+
+-- Run this snippet in your Supabase SQL Editor to apply exactly what you requested!
+ALTER TABLE user_directory 
+ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
+ADD COLUMN IF NOT EXISTS password_created BOOLEAN DEFAULT false;
+-- Clean migration for existing valid rows (if any)
+UPDATE user_directory SET status = 'pending' WHERE access_status = 'pending_approval';
+UPDATE user_directory SET status = 'approved', password_created = false WHERE access_status = 'approved' AND account_status = 'inactive';
+UPDATE user_directory SET status = 'active', password_created = true WHERE access_status = 'approved' AND account_status = 'active';
+
+-- ============================================================
+-- RUN THIS IN SUPABASE SQL EDITOR (Dashboard → SQL Editor)
+-- Fixed: removed duplicate realtime line (already enabled)
+-- ============================================================
+-- STEP 1: Add missing columns to user_directory
+ALTER TABLE user_directory 
+  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending',
+  ADD COLUMN IF NOT EXISTS password_created BOOLEAN DEFAULT false;
+-- STEP 2: Add unique constraint on email so upsert works
+ALTER TABLE user_directory 
+  DROP CONSTRAINT IF EXISTS user_directory_email_key;
+ALTER TABLE user_directory 
+  ADD CONSTRAINT user_directory_email_key UNIQUE (email);
+-- STEP 3: RLS Policies
+DROP POLICY IF EXISTS "Users can insert their own request" ON user_directory;
+CREATE POLICY "Users can insert their own request"
+  ON user_directory FOR INSERT
+  WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can read their own row" ON user_directory;
+CREATE POLICY "Users can read their own row"
+  ON user_directory FOR SELECT
+  USING (true);
+DROP POLICY IF EXISTS "Users can update own row" ON user_directory;
+CREATE POLICY "Users can update own row"
+  ON user_directory FOR UPDATE
+  USING (true);
+-- VERIFICATION: Check columns were added
+SELECT column_name, data_type, column_default 
+FROM information_schema.columns 
+WHERE table_name = 'user_directory' 
+  AND column_name IN ('status', 'password_created');
+
+-- ============================================================
+-- RUN THIS IN SUPABASE SQL EDITOR
+-- Adds all missing onboarding columns to user_directory
+-- ============================================================
+ALTER TABLE user_directory
+  ADD COLUMN IF NOT EXISTS full_name TEXT,
+  ADD COLUMN IF NOT EXISTS register_number TEXT,
+  ADD COLUMN IF NOT EXISTS class_details TEXT,
+  ADD COLUMN IF NOT EXISTS mobile_number TEXT,
+  ADD COLUMN IF NOT EXISTS parent_name TEXT,
+  ADD COLUMN IF NOT EXISTS parent_mobile TEXT,
+  ADD COLUMN IF NOT EXISTS gender TEXT,
+  ADD COLUMN IF NOT EXISTS institute TEXT,
+  ADD COLUMN IF NOT EXISTS year_of_study TEXT,
+  ADD COLUMN IF NOT EXISTS hostel_block TEXT,
+  ADD COLUMN IF NOT EXISTS room_number TEXT,
+  ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN DEFAULT false;
+-- Verify columns were added
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'user_directory'
+ORDER BY ordinal_position;
+
+
+ALTER TABLE student_details
+  ADD COLUMN IF NOT EXISTS email TEXT UNIQUE;
+
+ALTER TABLE student_details 
+  ADD COLUMN IF NOT EXISTS email TEXT UNIQUE,
+  ADD COLUMN IF NOT EXISTS full_name TEXT,
+  ADD COLUMN IF NOT EXISTS register_number TEXT;

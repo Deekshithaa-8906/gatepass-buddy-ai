@@ -1,437 +1,181 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { OutingRequest, Complaint } from '@/types';
-import { getRequests, updateRequest, getComplaints, addNotification, resolveComplaint } from '@/lib/storage';
-import { downloadGatepassPDF } from '@/lib/gatepass-pdf';
-import { MapPin, CheckCircle, XCircle, Clock, FileText, AlertTriangle, Download, ArrowLeft, CheckCheck, Search, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
-import ProfileDropdown from '@/components/ProfileDropdown';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import ApprovalTimeline from '@/components/ApprovalTimeline';
+import React, { useState, useEffect } from 'react';
+import { 
+  Building2, 
+  Users, 
+  MapPin, 
+  CheckCircle, 
+  XCircle, 
+  Clock, 
+  Search, 
+  Filter, 
+  LogOut, 
+  ShieldCheck, 
+  GraduationCap, 
+  Activity,
+  AlertTriangle,
+  User,
+  Bell,
+  ArrowRight,
+  TrendingUp,
+  Inbox,
+  UserX,
+  FileText
+} from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import bgImage from '../assets/sns-campus-bg.png';
 
-const StatusBadge = ({ status }: { status: string }) => {
-  const classes =
-    status === 'approved' || status === 'reconsidered' ? 'bg-success/20 text-success border-success/30' :
-    status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
-    status === 'resolved' ? 'bg-success/20 text-success border-success/30' :
-    status === 'escalated' ? 'bg-destructive/20 text-destructive border-destructive/30' :
-    'bg-warning/20 text-warning border-warning/30';
-  const label = status === 'reconsidered' ? 'Reconsidered' : status;
-  return <Badge className={`capitalize border ${classes}`}>{label}</Badge>;
-};
-
-const WardenDashboard = () => {
-  const { user } = useAuth();
+export function WardenDashboard() {
   const navigate = useNavigate();
-  const [requests, setRequests] = useState<OutingRequest[]>([]);
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
-  const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({});
-  const [searchQuery, setSearchQuery] = useState('');
-  const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('requests');
+  const [loading, setLoading] = useState(true);
+  const [requests, setRequests] = useState<any[]>([]);
 
   useEffect(() => {
-    if (!user || user.role !== 'warden') { navigate('/'); return; }
-    refreshData();
-  }, [user, navigate]);
+    // Fetch real Warden data here
+    setLoading(false);
+  }, []);
 
-  if (!user || user.role !== 'warden') return null;
-
-  const refreshData = () => {
-    setRequests(getRequests());
-    setComplaints(getComplaints());
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/');
   };
 
-  const pendingOuting = requests.filter(r => r.currentApprover === 'warden' && r.status === 'pending' && r.type === 'outing');
-  const pendingLeave = requests.filter(r => r.currentApprover === 'warden' && r.status === 'pending' && r.type === 'leave');
-  const history = requests.filter(r => r.approvalChain.some(s => s.role === 'warden' && s.status !== 'pending'));
-
-  // Declined by warden - for reconsideration
-  const declinedByMe = requests.filter(r => {
-    const step = r.approvalChain.find(s => s.role === 'warden');
-    return step && step.status === 'declined' && r.status === 'declined' && r.currentApprover === 'declined';
-  });
-
-  // Search filter for history
-  const q = searchQuery.toLowerCase().trim();
-  const filteredHistory = q ? history.filter(r =>
-    r.name.toLowerCase().includes(q) ||
-    r.regNumber.toLowerCase().includes(q) ||
-    r.roomNumber.toLowerCase().includes(q)
-  ) : history;
-
-  // Group history by student for movement tracking
-  const studentGroups = filteredHistory.reduce((acc, r) => {
-    const key = r.regNumber;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(r);
-    return acc;
-  }, {} as Record<string, OutingRequest[]>);
-
-  const handleApprove = (id: string) => {
-    let approvedRequest: OutingRequest | null = null;
-    updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === 'warden');
-      if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: user.name, timestamp: new Date().toISOString() };
-      r.currentApprover = 'completed';
-      r.status = 'approved';
-      approvedRequest = { ...r };
-      return r;
-    });
-
-    if (approvedRequest) {
-      const req = approvedRequest as OutingRequest;
-      // Student notification
-      addNotification({
-        id: crypto.randomUUID(),
-        requestId: req.id,
-        studentId: req.studentId,
-        method: 'sms',
-        destination: req.studentPhone,
-        message: `Your gatepass has been approved..! You can download it.`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
-      // Parent SMS notification
-      addNotification({
-        id: crypto.randomUUID(),
-        requestId: req.id,
-        studentId: req.studentId,
-        method: 'sms',
-        destination: req.parentPhone,
-        message: `PassNTrack Notification: Your child ${req.name} from ${req.institution} has received an approved gatepass and will be going out from ${new Date(req.outDateTime).toLocaleString()} to ${new Date(req.inDateTime).toLocaleString()}.`,
-        createdAt: new Date().toISOString(),
-        read: true, // Parent SMS - mark as read so it doesn't clutter student inbox
-      });
-    }
-    refreshData();
-  };
-
-  const handleDecline = (id: string) => {
-    const reason = declineReasons[id] || 'No reason provided';
-    let declinedRequest: OutingRequest | null = null;
-    updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === 'warden');
-      if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: user.name, reason, timestamp: new Date().toISOString() };
-      r.currentApprover = 'declined';
-      r.status = 'declined';
-      declinedRequest = { ...r };
-      return r;
-    });
-
-    if (declinedRequest) {
-      const req = declinedRequest as OutingRequest;
-      addNotification({
-        id: crypto.randomUUID(),
-        requestId: req.id,
-        studentId: req.studentId,
-        method: 'sms',
-        destination: req.studentPhone,
-        message: `Your gatepass request has been rejected by your Warden. Please contact your Warden for further details.`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
-    }
-    refreshData();
-  };
-
-  const handleReconsider = (id: string) => {
-    updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === 'warden');
-      if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = {
-        ...r.approvalChain[stepIdx],
-        status: 'reconsidered',
-        approvedBy: user.name,
-        reason: undefined,
-        timestamp: new Date().toISOString(),
-      };
-      r.currentApprover = 'completed';
-      r.status = 'approved';
-      return r;
-    });
-
-    const req = getRequests().find(r => r.id === id);
-    if (req) {
-      addNotification({
-        id: crypto.randomUUID(),
-        requestId: req.id,
-        studentId: req.studentId,
-        method: 'sms',
-        destination: req.studentPhone,
-        message: `Your gatepass has been reconsidered and approved by your Warden. You can now download it.`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
-      // Parent SMS
-      addNotification({
-        id: crypto.randomUUID(),
-        requestId: req.id,
-        studentId: req.studentId,
-        method: 'sms',
-        destination: req.parentPhone,
-        message: `PassNTrack Notification: Your child ${req.name} from ${req.institution} has received an approved gatepass and will be going out from ${new Date(req.outDateTime).toLocaleString()} to ${new Date(req.inDateTime).toLocaleString()}.`,
-        createdAt: new Date().toISOString(),
-        read: true,
-      });
-    }
-    refreshData();
-  };
-
-  const handleResolveComplaint = (complaint: Complaint) => {
-    resolveComplaint(complaint.id);
-    addNotification({
-      id: crypto.randomUUID(),
-      requestId: complaint.id,
-      studentId: complaint.studentId,
-      method: 'sms',
-      destination: '',
-      message: `[PassNTrack] Your complaint regarding "${complaint.text.slice(0, 60)}${complaint.text.length > 60 ? '...' : ''}" has been marked as RESOLVED by Warden. Thank you for bringing this to our attention.`,
-      createdAt: new Date().toISOString(),
-      read: false,
-    });
-    refreshData();
-  };
-
-  const RequestCard = ({ r }: { r: OutingRequest }) => (
-    <div className="card-elevated">
-      <div className="flex justify-between items-start mb-3">
-        <div>
-          <h3 className="font-semibold text-foreground text-lg">{r.name}</h3>
-          <p className="text-sm text-muted-foreground">{r.type.toUpperCase()} | {r.year} Year, {r.branch} | {r.institution}</p>
+  const renderStats = () => (
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+      {[
+        { title: 'Total Inmates', count: '1,240', icon: <Users className="w-6 h-6" />, color: 'from-[#CD0000] to-[#FF4D4D]' },
+        { title: 'Active Passes', count: '42', icon: <MapPin className="w-6 h-6" />, color: 'from-orange-500 to-yellow-500' },
+        { title: 'New Requests', count: '12', icon: <Inbox className="w-6 h-6" />, color: 'from-blue-500 to-indigo-500' },
+        { title: 'Issues Logged', count: '5', icon: <AlertTriangle className="w-6 h-6" />, color: 'from-purple-500 to-pink-500' }
+      ].map((stat, i) => (
+        <div key={i} className={`bg-white/40 backdrop-blur-xl p-6 rounded-[2rem] border border-white/60 shadow-xl flex items-center gap-5 transition-transform hover:scale-105 group`}>
+          <div className={`bg-gradient-to-br ${stat.color} p-4 rounded-2xl text-white shadow-lg shadow-red-200 group-hover:rotate-6 transition-transform`}>
+            {stat.icon}
+          </div>
+          <div>
+            <p className="text-xs font-black text-gray-500 uppercase tracking-widest">{stat.title}</p>
+            <p className="text-3xl font-black text-gray-900 leading-tight">{stat.count}</p>
+          </div>
         </div>
-        <StatusBadge status="pending" />
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
-        <p><strong>Reg No:</strong> {r.regNumber}</p>
-        <p><strong>Room:</strong> {r.roomNumber}</p>
-        <p><strong>Student Phone:</strong> {r.studentPhone}</p>
-        <p><strong>Parent Phone:</strong> {r.parentPhone}</p>
-        <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()}</p>
-        <p><strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
-        <p className="col-span-2"><strong>Reason:</strong> {r.reason}</p>
-      </div>
-      {r.approvalChain.some(s => s.status !== 'pending') && (
-        <ApprovalTimeline chain={r.approvalChain} />
-      )}
-      <div className="flex items-end gap-3 mt-3">
-        <Button className="gap-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => handleApprove(r.id)}>
-          <CheckCircle className="w-4 h-4" /> Approve & Generate Pass
-        </Button>
-        <div className="flex-1">
-          <Textarea placeholder="Reason for declining..." value={declineReasons[r.id] || ''} onChange={e => setDeclineReasons(p => ({ ...p, [r.id]: e.target.value }))} rows={1} className="text-sm" />
-        </div>
-        <Button variant="destructive" className="gap-1" onClick={() => handleDecline(r.id)}>
-          <XCircle className="w-4 h-4" /> Decline
-        </Button>
-      </div>
+      ))}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="gradient-hero text-primary-foreground py-4 px-6">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <MapPin className="w-6 h-6" />
-            <span className="font-display font-bold text-lg">PassNTrack</span>
+    <div className="min-h-screen relative flex flex-col md:flex-row font-sans overflow-hidden bg-gray-50">
+      {/* Background Decor */}
+      <div className="fixed inset-0 bg-cover bg-center z-0 transition-transform duration-1000 scale-100 opacity-80" style={{ backgroundImage: `url(${bgImage})` }} />
+      <div className="fixed inset-0 bg-gradient-to-br from-white/90 via-white/80 to-red-100/30 z-0 backdrop-blur-sm" />
+
+      {/* Modern Side-Nav */}
+      <aside className="relative z-20 w-full md:w-72 bg-white/60 backdrop-blur-2xl border-r border-white/50 flex flex-col shadow-2xl h-screen sticky top-0 overflow-y-auto">
+        <div className="p-8 border-b border-white/40 flex items-center gap-3">
+          <div className="bg-[#CD0000] p-2 rounded-xl shadow-lg ring-1 ring-white/50">
+            <Building2 className="w-7 h-7 text-white" />
+          </div>
+          <span className="text-2xl font-black tracking-tight text-gray-900 uppercase">Warden<span className="text-[#CD0000]">HQ</span></span>
+        </div>
+
+        <nav className="flex-1 py-8 px-4 space-y-3">
+          <button onClick={() => setActiveTab('requests')} className={`flex items-center gap-3 w-full px-5 py-4 rounded-2xl font-black transition-all ${activeTab === 'requests' ? 'bg-[#CD0000] text-white shadow-2xl shadow-[#CD0000]/30' : 'text-gray-600 hover:bg-white/80 hover:text-[#CD0000]'}`}>
+            <Activity className="w-5 h-5" /> Live Monitoring
+          </button>
+          <button onClick={() => setActiveTab('inmates')} className={`flex items-center gap-3 w-full px-5 py-4 rounded-2xl font-black transition-all ${activeTab === 'inmates' ? 'bg-[#CD0000] text-white shadow-2xl shadow-[#CD0000]/30' : 'text-gray-600 hover:bg-white/80 hover:text-[#CD0000]'}`}>
+            <Users className="w-5 h-5" /> Inmate Directory
+          </button>
+          <button onClick={() => setActiveTab('reports')} className={`flex items-center gap-3 w-full px-5 py-4 rounded-2xl font-black transition-all ${activeTab === 'reports' ? 'bg-[#CD0000] text-white shadow-2xl shadow-[#CD0000]/30' : 'text-gray-600 hover:bg-white/80 hover:text-[#CD0000]'}`}>
+            <TrendingUp className="w-5 h-5" /> Guard Logs
+          </button>
+          <button onClick={() => setActiveTab('alerts')} className={`flex items-center gap-3 w-full px-5 py-4 rounded-2xl font-black transition-all ${activeTab === 'alerts' ? 'bg-[#CD0000] text-white shadow-2xl shadow-[#CD0000]/30' : 'text-gray-600 hover:bg-white/80 hover:text-[#CD0000]'}`}>
+            <Bell className="w-5 h-5" /> Emergency
+          </button>
+        </nav>
+
+        <div className="p-6 border-t border-white/40 mt-auto">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-5 py-4 text-gray-700 hover:text-[#CD0000] hover:bg-white/80 font-black rounded-2xl transition-all shadow-sm">
+            <LogOut className="w-5 h-5" /> Terminate Session
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Dashboard Area */}
+      <main className="relative z-10 flex-1 h-screen overflow-y-auto px-8 py-10 scroll-smooth">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+          <div>
+            <h1 className="text-5xl font-black text-gray-900 tracking-tighter">Warden Dashboard</h1>
+            <p className="text-gray-600 font-bold uppercase tracking-[0.2em] text-xs mt-2 ml-1">Central Oversight Protocol active</p>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm opacity-90">{user.name} (WARDEN)</span>
-            <ProfileDropdown />
+             <div className="relative group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-[#CD0000] transition-colors" />
+                <input type="text" placeholder="Search Inmates..." className="pl-11 pr-6 py-3.5 bg-white/60 backdrop-blur-xl border border-white/80 rounded-2xl outline-none focus:ring-2 focus:ring-[#CD0000]/20 font-bold transition-all w-64 shadow-inner" />
+             </div>
+             <div className="bg-white/80 backdrop-blur-xl p-3 rounded-2xl border border-white cursor-pointer hover:bg-[#CD0000] group transition-all shadow-sm">
+                <Filter className="w-5 h-5 text-gray-600 group-hover:text-white" />
+             </div>
+          </div>
+        </header>
+
+        {renderStats()}
+
+        {/* Content Table Container */}
+        <div className="bg-white/50 backdrop-blur-3xl rounded-[2.5rem] border border-white/80 shadow-2xl p-8 transition-all hover:shadow-[0_40px_80px_rgba(0,0,0,0.08)]">
+          <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-6">
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+              <Clock className="w-6 h-6 text-[#CD0000]" /> Recent Security Activity
+            </h2>
+            <button className="text-[#CD0000] font-black uppercase text-xs tracking-widest flex items-center gap-2 hover:gap-3 transition-all">
+              View History <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="pb-5 font-black text-gray-400 uppercase text-[10px] tracking-[0.15em]">Avatar</th>
+                  <th className="pb-5 font-black text-gray-400 uppercase text-[10px] tracking-[0.15em]">Student Name</th>
+                  <th className="pb-5 font-black text-gray-400 uppercase text-[10px] tracking-[0.15em]">Block/Room</th>
+                  <th className="pb-5 font-black text-gray-400 uppercase text-[10px] tracking-[0.15em]">Pass Type</th>
+                  <th className="pb-5 font-black text-gray-400 uppercase text-[10px] tracking-[0.15em]">Status</th>
+                  <th className="pb-5 font-black text-gray-400 uppercase text-[10px] tracking-[0.15em]">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {[
+                  { name: "Rahul Sharma", block: "A-201", type: "Outing", status: "In Gate" },
+                  { name: "Sneha Reddy", block: "B-105", type: "Personal", status: "Outside" },
+                  { name: "Vikas Kumar", block: "C-302", type: "Leave", status: "Outside" },
+                ].map((row, i) => (
+                  <tr key={i} className="group hover:bg-red-50/30 transition-colors">
+                    <td className="py-5">
+                       <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#CD0000] to-[#FF4D4D] flex items-center justify-center text-white font-black shadow-lg">
+                         {row.name.charAt(0)}
+                       </div>
+                    </td>
+                    <td className="py-5"><p className="font-black text-gray-900">{row.name}</p><p className="text-[10px] text-gray-500 font-bold uppercase">Reg #ST827{i}</p></td>
+                    <td className="py-5 font-bold text-gray-700">{row.block}</td>
+                    <td className="py-5">
+                       <span className="px-3 py-1 bg-white rounded-lg border border-gray-200 text-[10px] font-black uppercase text-gray-600">{row.type}</span>
+                    </td>
+                    <td className="py-5">
+                       <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${row.status === 'In Gate' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}`}>
+                         {row.status}
+                       </span>
+                    </td>
+                    <td className="py-5">
+                       <button className="p-2.5 rounded-xl hover:bg-white text-gray-400 hover:text-[#CD0000] hover:shadow-sm border border-transparent hover:border-gray-100 transition-all">
+                         <FileText className="w-5 h-5" />
+                       </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center gap-4 mb-6">
-          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/')}>
-            <ArrowLeft className="w-4 h-4" /> Back
-          </Button>
-          <h1 className="text-3xl font-display font-bold text-foreground">Warden Dashboard</h1>
-        </div>
-
-        <Tabs defaultValue="outing" className="space-y-6">
-          <TabsList className="flex flex-wrap gap-1">
-            <TabsTrigger value="outing" className="gap-1">
-              <Clock className="w-4 h-4" /> Pending Outing ({pendingOuting.length})
-            </TabsTrigger>
-            <TabsTrigger value="leave" className="gap-1">
-              <Clock className="w-4 h-4" /> Pending Leave ({pendingLeave.length})
-            </TabsTrigger>
-            {declinedByMe.length > 0 && (
-              <TabsTrigger value="declined" className="gap-1">
-                <XCircle className="w-4 h-4" /> Declined ({declinedByMe.length})
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="complaints" className="gap-1">
-              <AlertTriangle className="w-4 h-4" /> Complaints ({complaints.length})
-            </TabsTrigger>
-            <TabsTrigger value="history" className="gap-1">
-              <FileText className="w-4 h-4" /> History
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="outing">
-            {pendingOuting.length === 0 ? (
-              <div className="card-elevated text-center py-12 text-muted-foreground">
-                <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p>No pending outing requests</p>
-              </div>
-            ) : (
-              <div className="space-y-4">{pendingOuting.map(r => <RequestCard key={r.id} r={r} />)}</div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="leave">
-            {pendingLeave.length === 0 ? (
-              <div className="card-elevated text-center py-12 text-muted-foreground">
-                <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p>No pending leave requests</p>
-              </div>
-            ) : (
-              <div className="space-y-4">{pendingLeave.map(r => <RequestCard key={r.id} r={r} />)}</div>
-            )}
-          </TabsContent>
-
-          {declinedByMe.length > 0 && (
-            <TabsContent value="declined">
-              <div className="space-y-4">
-                {declinedByMe.map(r => (
-                  <div key={r.id} className="card-elevated border-l-4 border-l-destructive">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-semibold text-foreground text-lg">{r.name}</h3>
-                        <p className="text-sm text-muted-foreground">{r.type.toUpperCase()} | {r.year} Year, {r.branch} | {r.institution}</p>
-                      </div>
-                      <StatusBadge status="declined" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
-                      <p><strong>Reg No:</strong> {r.regNumber}</p>
-                      <p><strong>Room:</strong> {r.roomNumber}</p>
-                      <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()}</p>
-                      <p><strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
-                      <p className="col-span-2"><strong>Reason:</strong> {r.reason}</p>
-                    </div>
-                    <ApprovalTimeline chain={r.approvalChain} />
-                    <Button className="mt-3 gap-2 bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleReconsider(r.id)}>
-                      <RotateCcw className="w-4 h-4" /> Reconsider & Approve
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
-          )}
-
-          <TabsContent value="complaints">
-            {complaints.length === 0 ? (
-              <div className="card-elevated text-center py-12 text-muted-foreground"><p>No complaints submitted</p></div>
-            ) : (
-              <div className="space-y-4">
-                {complaints.map(c => (
-                  <div key={c.id} className="card-elevated">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-semibold text-foreground">{c.name} — Room {c.roomNumber}</h3>
-                        <p className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</p>
-                      </div>
-                      <StatusBadge status={c.resolved ? 'resolved' : c.status === 'escalated' ? 'escalated' : 'pending'} />
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-3">{c.text}</p>
-                    {c.resolved && c.resolvedAt && (
-                      <p className="text-xs text-success">Resolved on {new Date(c.resolvedAt).toLocaleString()}</p>
-                    )}
-                    {!c.resolved && (
-                      <Button size="sm" className="gap-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => handleResolveComplaint(c)}>
-                        <CheckCheck className="w-4 h-4" /> Mark as Solved
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="history">
-            {/* Search Bar */}
-            <div className="card-elevated mb-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by student name, register number, or room number..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            {Object.keys(studentGroups).length === 0 ? (
-              <div className="card-elevated text-center py-12 text-muted-foreground"><p>No past approvals</p></div>
-            ) : (
-              <div className="space-y-4">
-                {Object.entries(studentGroups).map(([regNo, studentRequests]) => {
-                  const first = studentRequests[0];
-                  const isExpanded = expandedStudent === regNo;
-                  return (
-                    <div key={regNo} className="card-elevated">
-                      <div
-                        className="flex justify-between items-center cursor-pointer"
-                        onClick={() => setExpandedStudent(isExpanded ? null : regNo)}
-                      >
-                        <div>
-                          <h3 className="font-semibold text-foreground">{first.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {first.regNumber} | Room {first.roomNumber} | {first.institution}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{studentRequests.length} record{studentRequests.length > 1 ? 's' : ''}</Badge>
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </div>
-                      </div>
-
-                      {isExpanded && (
-                        <div className="mt-4 space-y-3 border-t pt-4">
-                          {studentRequests.map(r => (
-                            <div key={r.id} className="bg-muted/50 rounded-lg p-4">
-                              <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <p className="font-medium text-foreground">{r.type === 'outing' ? 'Outing' : 'Leave'} Pass</p>
-                                  <p className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</p>
-                                </div>
-                                <StatusBadge status={r.status} />
-                              </div>
-                              <div className="grid grid-cols-2 gap-1 text-sm text-muted-foreground mb-2">
-                                <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()}</p>
-                                <p><strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
-                                <p className="col-span-2"><strong>Reason:</strong> {r.reason}</p>
-                              </div>
-                              <ApprovalTimeline chain={r.approvalChain} />
-                              {r.status === 'approved' && (
-                                <Button size="sm" variant="outline" className="mt-2 gap-1" onClick={() => downloadGatepassPDF(r)}>
-                                  <Download className="w-3 h-3" /> Download PDF
-                                </Button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
       </main>
     </div>
   );
-};
-
-export default WardenDashboard;
+}
