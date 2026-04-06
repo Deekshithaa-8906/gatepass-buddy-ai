@@ -130,6 +130,25 @@ async function createPasswordLink(email: string, type: 'invite' | 'recovery') {
   return payload.properties?.action_link || payload.action_link || '';
 }
 
+// Resend should work for both:
+// 1) existing auth users (recovery link)
+// 2) pre-approved directory-only users (invite link)
+async function createResendLink(email: string) {
+  try {
+    const recoveryLink = await createPasswordLink(email, 'recovery');
+    if (recoveryLink) return recoveryLink;
+  } catch {
+    // fall back to invite link below
+  }
+
+  const inviteLink = await createPasswordLink(email, 'invite');
+  if (!inviteLink) {
+    throw new Error('Unable to generate resend link');
+  }
+
+  return inviteLink;
+}
+
 async function upsertManualUser(body: RequestBody) {
   const response = await fetch(`${supabaseUrl}/rest/v1/user_directory?on_conflict=email`, {
     method: 'POST',
@@ -179,8 +198,19 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true, action: body.action, email: body.email });
     }
 
-    if (body.action === 'approved' || body.action === 'resend_create_password') {
+    if (body.action === 'approved') {
       const actionLink = await createPasswordLink(body.email, 'recovery');
+      await sendEmail(
+        body.email,
+        'PassNTrack: Create Your Password',
+        createPasswordEmail(actionLink, 'PassNTrack: Create Your Password'),
+        `Your PassNTrack account has been approved. Create your password here: ${actionLink}`,
+      );
+      return json({ ok: true, action: body.action, email: body.email });
+    }
+
+    if (body.action === 'resend_create_password') {
+      const actionLink = await createResendLink(body.email);
       await sendEmail(
         body.email,
         'PassNTrack: Create Your Password',

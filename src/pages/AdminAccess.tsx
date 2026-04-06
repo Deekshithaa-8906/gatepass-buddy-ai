@@ -285,6 +285,7 @@ function VerifyAndAddUsersSection() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<RoleTab>('student');
   const [loading, setLoading] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
   const [verifiedUsers, setVerifiedUsers] = useState<DirectoryUser[]>([]);
@@ -314,6 +315,43 @@ function VerifyAndAddUsersSection() {
       void supabase.removeChannel(channel);
     };
   }, []);
+
+  const resendCreatePasswordEmail = async (targetEmail: string) => {
+    setResendingEmail(targetEmail);
+    setMessage('');
+    setIsError(false);
+
+    const invokeResult = await supabase.functions.invoke('admin-user-mailer', {
+      body: { action: 'resend_create_password', email: targetEmail },
+    });
+
+    if (!invokeResult.error) {
+      setMessage(`Create-password email resent to ${targetEmail}.`);
+      setIsError(false);
+      setResendingEmail(null);
+      return;
+    }
+
+    // Fallback: send a Supabase auth magic link to the create-password route.
+    // This keeps the flow as "create password" and avoids reset-password emails.
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email: targetEmail,
+      options: {
+        emailRedirectTo: `${window.location.origin}/create-password`,
+      },
+    });
+
+    if (!otpError) {
+      setMessage(`Create-password link sent to ${targetEmail} via fallback mail flow.`);
+      setIsError(false);
+      setResendingEmail(null);
+      return;
+    }
+
+    setMessage(`Unable to send create-password email for ${targetEmail}. Mailer and fallback both failed.`);
+    setIsError(true);
+    setResendingEmail(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -451,17 +489,12 @@ function VerifyAndAddUsersSection() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
-                        onClick={async () => {
-                          const { error } = await supabase.functions.invoke('admin-user-mailer', {
-                            body: { action: 'resend_create_password', email: user.email },
-                          });
-                          if (error) {
-                            alert('Unable to resend create-password email.');
-                          }
-                        }}
+                        onClick={() => void resendCreatePasswordEmail(user.email)}
+                        disabled={resendingEmail !== null}
                         className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg text-[#CD0000] hover:bg-[#CD0000]/10"
                       >
-                        <RefreshCw className="w-4 h-4" /> Resend Link
+                        <RefreshCw className={`w-4 h-4 ${resendingEmail === user.email ? 'animate-spin' : ''}`} />
+                        {resendingEmail === user.email ? 'Sending...' : 'Resend Link'}
                       </button>
                     </td>
                   </tr>

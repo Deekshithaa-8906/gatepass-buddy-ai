@@ -22,10 +22,6 @@ interface Profile {
   hostel_block?: string;
   room_number?: string;
   department?: string;
-  mentor?: string;
-  advisor?: string;
-  hod?: string;
-  principal?: string;
   password_created?: boolean;
   onboarding_complete?: boolean;
   access_status?: string;
@@ -78,7 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { data, error } = await supabase
         .from('user_directory')
-        .select('id, email, full_name, role, status, mobile_number, register_number, class_details, parent_name, parent_mobile, gender, institute, year_of_study, hostel_block, room_number, department, mentor, advisor, hod, principal, password_created, onboarding_complete, access_status, account_status')
+        .select('id, email, full_name, role, status, mobile_number, register_number, class_details, parent_name, parent_mobile, gender, institute, year_of_study, hostel_block, room_number, department, password_created, onboarding_complete, access_status, account_status')
         .eq('email', userEmail)
         .maybeSingle();
 

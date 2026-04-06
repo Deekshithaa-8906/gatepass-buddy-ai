@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, GraduationCap } from 'lucide-react';
+import { Lock, GraduationCap, Eye, EyeOff, Check, X } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import bgImage from '../assets/sns-campus-bg.png';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+
+type AppRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'admin';
+
+const getPasswordChecks = (value: string) => ({
+  minLength: value.length >= 8,
+  uppercase: /[A-Z]/.test(value),
+  lowercase: /[a-z]/.test(value),
+  number: /\d/.test(value),
+  special: /[^A-Za-z0-9]/.test(value),
+});
 
 export function CreatePassword() {
   const navigate = useNavigate();
@@ -14,13 +24,26 @@ export function CreatePassword() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
-  const [role, setRole] = useState<'student' | 'mentor' | 'hod' | 'principal'>('student');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const resolvedRole: AppRole = (profile?.role as AppRole) ?? 'student';
+  const checks = getPasswordChecks(password);
+  const checksPassed = Object.values(checks).filter(Boolean).length;
+
+  let strengthLabel: 'Weak' | 'Medium' | 'Strong' = 'Weak';
+  let strengthColor = 'bg-red-500';
+  if (checksPassed === 5) {
+    strengthLabel = 'Strong';
+    strengthColor = 'bg-green-500';
+  } else if (checksPassed >= 3) {
+    strengthLabel = 'Medium';
+    strengthColor = 'bg-orange-500';
+  }
+  const strengthPercent = Math.max(10, (checksPassed / 5) * 100);
 
   // If already created, send to onboarding
   useEffect(() => {
-    if (profile?.role) {
-      setRole(profile.role as 'student' | 'mentor' | 'hod' | 'principal');
-    }
     if (profile?.password_created) {
       if (profile.role === 'student' && !profile.onboarding_complete) {
         navigate('/student-onboarding');
@@ -35,15 +58,20 @@ export function CreatePassword() {
   }, [profile, navigate]);
 
   const routeByRole = (value: string) => {
+    if (value === 'admin') return '/admin';
     if (value === 'principal') return '/principal-dashboard';
-    if (value === 'mentor' || value === 'hod') return '/staff-dashboard';
+    if (value === 'mentor' || value === 'hod' || value === 'advisor' || value === 'warden') return '/staff-dashboard';
     return '/student-onboarding';
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) { setMsg("Passwords do not match"); setIsError(true); return; }
-    if (password.length < 6) { setMsg("Password must be at least 6 characters"); setIsError(true); return; }
+    if (checksPassed < 5) {
+      setMsg('Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
+      setIsError(true);
+      return;
+    }
 
     setLoading(true);
     setMsg('');
@@ -57,16 +85,16 @@ export function CreatePassword() {
       .from('user_directory')
       .update({
         password_created: true,
-        role,
-        status: role === 'student' ? 'approved' : 'active',
-        account_status: role === 'student' ? 'inactive' : 'active',
+        role: resolvedRole,
+        status: resolvedRole === 'student' ? 'approved' : 'active',
+        account_status: resolvedRole === 'student' ? 'inactive' : 'active',
         updated_at: new Date().toISOString(),
       })
       .eq('email', user?.email ?? '');
     
     await refreshProfile();
     setMsg('Password created successfully! Redirecting...');
-    setTimeout(() => navigate(routeByRole(role)), 1200);
+    setTimeout(() => navigate(routeByRole(resolvedRole)), 1200);
   };
 
   return (
@@ -92,36 +120,82 @@ export function CreatePassword() {
           <p className="text-gray-800 font-medium mb-8 leading-relaxed">Secure your new account to continue!</p>
           <form className="w-full space-y-5" onSubmit={handleCreate}>
             <div className="relative">
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as 'student' | 'mentor' | 'hod' | 'principal')}
-                className="w-full px-4 py-3 bg-white/50 border border-white/40 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none appearance-none text-gray-900 font-medium backdrop-blur-sm cursor-pointer hover:border-white/60 transition-all"
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="New Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 pr-12 py-3.5 bg-white/90 border border-gray-200 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none text-gray-900 placeholder:text-gray-500 shadow-sm"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 px-3 text-gray-600 hover:text-gray-900"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
-                <option value="student">Student</option>
-                <option value="mentor">Teacher</option>
-                <option value="hod">HOD</option>
-                <option value="principal">Principal</option>
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-600">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
-              </div>
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
-            <input
-              type="password"
-              placeholder="New Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-white/50 border border-white/40 rounded-xl outline-none text-gray-900"
-              required
-            />
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-white/50 border border-white/40 rounded-xl outline-none text-gray-900"
-              required
-            />
+
+            {password && (
+              <div className="rounded-xl bg-white/85 border border-gray-200 p-3 text-left shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-gray-700">Password strength</span>
+                  <span className={`text-sm font-bold ${strengthLabel === 'Strong' ? 'text-green-700' : strengthLabel === 'Medium' ? 'text-orange-700' : 'text-red-700'}`}>
+                    {strengthLabel}
+                  </span>
+                </div>
+                <div className="h-2.5 w-full bg-gray-200 rounded-full overflow-hidden mb-3">
+                  <div
+                    className={`h-full ${strengthColor} transition-all duration-300`}
+                    style={{ width: `${strengthPercent}%` }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    {checks.minLength ? <Check className="w-4 h-4 text-green-600" /> : <X className="w-4 h-4 text-red-600" />}
+                    At least 8 characters
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    {checks.uppercase ? <Check className="w-4 h-4 text-green-600" /> : <X className="w-4 h-4 text-red-600" />}
+                    One uppercase letter
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    {checks.lowercase ? <Check className="w-4 h-4 text-green-600" /> : <X className="w-4 h-4 text-red-600" />}
+                    One lowercase letter
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    {checks.number ? <Check className="w-4 h-4 text-green-600" /> : <X className="w-4 h-4 text-red-600" />}
+                    One number
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-700 sm:col-span-2">
+                    {checks.special ? <Check className="w-4 h-4 text-green-600" /> : <X className="w-4 h-4 text-red-600" />}
+                    One special character
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 pr-12 py-3.5 bg-white/90 border border-gray-200 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none text-gray-900 placeholder:text-gray-500 shadow-sm"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute inset-y-0 right-0 px-3 text-gray-600 hover:text-gray-900"
+                aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              >
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
             {msg && <p className={`text-sm font-semibold ${isError ? 'text-[#CD0000]' : 'text-green-600'}`}>{msg}</p>}
             <button type="submit" disabled={loading} className="w-full bg-[#CD0000] text-white py-4 rounded-xl font-bold shadow-md active:scale-95">
               {loading ? 'Creating...' : 'Create Password'}

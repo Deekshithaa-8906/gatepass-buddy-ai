@@ -1,15 +1,55 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ShieldCheck, GraduationCap, ArrowLeft, Mail, Lock } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import bgImage from '../assets/sns-campus-bg.png';
+import { supabase } from '../lib/supabase';
 
 export function AdminLogin() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleAdminLogin = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, you would validate credentials here.
+
+    setLoading(true);
+    setErrorMessage('');
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    if (error) {
+      setErrorMessage(error.message || 'Unable to sign in as admin.');
+      setLoading(false);
+      return;
+    }
+
+    const signedInEmail = data.user?.email;
+    if (!signedInEmail) {
+      setErrorMessage('Unable to verify admin account.');
+      setLoading(false);
+      return;
+    }
+
+    const { data: directoryUser, error: roleError } = await supabase
+      .from('user_directory')
+      .select('role')
+      .eq('email', signedInEmail)
+      .maybeSingle();
+
+    if (roleError || directoryUser?.role !== 'admin') {
+      await supabase.auth.signOut();
+      setErrorMessage('This account does not have admin access.');
+      setLoading(false);
+      return;
+    }
+
     navigate('/admin');
+    setLoading(false);
   };
 
   return (
@@ -60,6 +100,8 @@ export function AdminLogin() {
                 </div>
                 <input
                   type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-white/50 border border-white/40 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 placeholder-gray-600 font-medium backdrop-blur-sm"
                   placeholder="admin@snsgroups.com"
                   required
@@ -77,6 +119,8 @@ export function AdminLogin() {
                 </div>
                 <input
                   type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 bg-white/50 border border-white/40 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 placeholder-gray-600 font-medium backdrop-blur-sm"
                   placeholder="Enter admin password"
                   required
@@ -84,8 +128,10 @@ export function AdminLogin() {
               </div>
             </div>
 
-            <button type="submit" className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white rounded-xl font-bold transition-all shadow-md hover:shadow-lg active:scale-95 text-center px-6 py-3.5 mt-4">
-              Access Dashboard
+            {errorMessage && <p className="text-sm font-semibold text-[#CD0000]">{errorMessage}</p>}
+
+            <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white rounded-xl font-bold transition-all shadow-md hover:shadow-lg active:scale-95 text-center px-6 py-3.5 mt-4 disabled:opacity-60">
+              {loading ? 'Signing In...' : 'Access Dashboard'}
             </button>
           </form>
         </div>

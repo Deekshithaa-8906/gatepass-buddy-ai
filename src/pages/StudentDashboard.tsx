@@ -20,13 +20,22 @@ import {
   ChevronDown,
   Users,
   ShieldCheck,
-  Building2,
   Mail
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import bgImage from '../assets/sns-campus-bg.png';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+
+type FacultyRole = 'mentor' | 'advisor' | 'hod' | 'principal';
+
+type FacultyOption = {
+  full_name: string | null;
+  email: string;
+  role: FacultyRole;
+  institute: string | null;
+  department: string | null;
+};
 
 export function StudentDashboard() {
   const navigate = useNavigate();
@@ -48,10 +57,20 @@ export function StudentDashboard() {
     hostelBlock: "A",
     roomNumber: "205",
     mentor: "",
+    mentorEmail: "",
     advisor: "",
-    hod: "Dr. K. Anderson",
-    principal: "Dr. V. Ram"
+    advisorEmail: "",
+    hod: "",
+    hodEmail: "",
+    principal: "",
+    principalEmail: "",
   });
+
+  const [facultyLoading, setFacultyLoading] = useState(false);
+  const [mentorOptions, setMentorOptions] = useState<FacultyOption[]>([]);
+  const [advisorOptions, setAdvisorOptions] = useState<FacultyOption[]>([]);
+  const [hodOptions, setHodOptions] = useState<FacultyOption[]>([]);
+  const [principalOptions, setPrincipalOptions] = useState<FacultyOption[]>([]);
 
   useEffect(() => {
     if (!accountProfile) return;
@@ -69,15 +88,101 @@ export function StudentDashboard() {
       classDetails: accountProfile.class_details || current.classDetails,
       hostelBlock: accountProfile.hostel_block || current.hostelBlock,
       roomNumber: accountProfile.room_number || current.roomNumber,
-      mentor: accountProfile.mentor || current.mentor,
-      advisor: accountProfile.advisor || current.advisor,
-      hod: accountProfile.hod || current.hod,
-      principal: accountProfile.principal || current.principal,
     }));
   }, [accountProfile]);
 
-  const mentors = ["Dr. A. Smith", "Prof. J. Doe", "Ms. S. Williams", "Mr. P. Kumar"];
-  const advisors = ["Dr. B. Johnson", "Prof. R. Davis", "Mr. M. Taylor", "Ms. L. Rani"];
+  useEffect(() => {
+    if (!user?.email) return;
+
+    const loadSavedFacultyAssignments = async () => {
+      const { data, error } = await supabase
+        .from('user_directory')
+        .select('mentor, mentor_email, advisor, advisor_email, hod, hod_email, principal, principal_email')
+        .eq('email', user.email)
+        .maybeSingle();
+
+      if (error) {
+        // Ignore missing-column errors until DB migration is applied.
+        if (error.code !== '42703') {
+          console.error('Unable to load faculty assignments:', error);
+        }
+        return;
+      }
+
+      if (!data) return;
+
+      setProfile((current) => ({
+        ...current,
+        mentor: data.mentor || current.mentor,
+        mentorEmail: data.mentor_email || current.mentorEmail,
+        advisor: data.advisor || current.advisor,
+        advisorEmail: data.advisor_email || current.advisorEmail,
+        hod: data.hod || current.hod,
+        hodEmail: data.hod_email || current.hodEmail,
+        principal: data.principal || current.principal,
+        principalEmail: data.principal_email || current.principalEmail,
+      }));
+    };
+
+    void loadSavedFacultyAssignments();
+  }, [user?.email]);
+
+  useEffect(() => {
+    const institute = profile.institute?.trim();
+    const department = profile.department?.trim();
+    if (!institute || !department) return;
+
+    const loadFacultyOptions = async () => {
+      setFacultyLoading(true);
+
+      const { data, error } = await supabase
+        .from('user_directory')
+        .select('full_name, email, role, institute, department')
+        .in('role', ['mentor', 'advisor', 'hod', 'principal'])
+        .eq('institute', institute)
+        .eq('access_status', 'approved')
+        .order('full_name', { ascending: true });
+
+      if (error) {
+        console.error('Unable to load faculty options:', error);
+        setFacultyLoading(false);
+        return;
+      }
+
+      const rows = (data || []) as FacultyOption[];
+
+      const isDeptMatch = (row: FacultyOption) => (row.department || '').trim().toLowerCase() === department.toLowerCase();
+
+      const mentors = rows.filter((row) => row.role === 'mentor' && isDeptMatch(row));
+      const advisors = rows.filter((row) => row.role === 'advisor' && isDeptMatch(row));
+      const hods = rows.filter((row) => row.role === 'hod' && isDeptMatch(row));
+      const principals = rows.filter((row) => row.role === 'principal');
+
+      setMentorOptions(mentors);
+      setAdvisorOptions(advisors);
+      setHodOptions(hods);
+      setPrincipalOptions(principals);
+
+      const principalCandidate = principals[0];
+      if (principalCandidate) {
+        const principalName = principalCandidate.full_name || principalCandidate.email;
+        setProfile((current) => {
+          if (current.principalEmail === principalCandidate.email && current.principal === principalName) {
+            return current;
+          }
+          return {
+            ...current,
+            principal: principalName,
+            principalEmail: principalCandidate.email,
+          };
+        });
+      }
+
+      setFacultyLoading(false);
+    };
+
+    void loadFacultyOptions();
+  }, [profile.institute, profile.department]);
 
   // Mock Data for Status
   const [requests] = useState([
@@ -117,15 +222,23 @@ export function StudentDashboard() {
         hostel_block: profile.hostelBlock,
         room_number: profile.roomNumber,
         mentor: profile.mentor,
+        mentor_email: profile.mentorEmail,
         advisor: profile.advisor,
+        advisor_email: profile.advisorEmail,
         hod: profile.hod,
+        hod_email: profile.hodEmail,
         principal: profile.principal,
+        principal_email: profile.principalEmail,
         onboarding_complete: true,
         updated_at: new Date().toISOString(),
       })
       .eq('email', user.email);
 
     if (error) {
+      if (error.code === '42703') {
+        alert('Database columns for faculty assignments are missing. Please apply the latest DB migration and try again.');
+        return;
+      }
       alert('Unable to save profile changes. Please try again.');
       return;
     }
@@ -369,25 +482,51 @@ export function StudentDashboard() {
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Users className="h-5 w-5 text-gray-600" />
                       </div>
-                      <select value={profile.mentor} onChange={(e) => setProfile({...profile, mentor: e.target.value})} required className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none">
-                        <option value="" disabled>Select Mentor</option>
-                        {mentors.map(m => <option key={m} value={m}>{m}</option>)}
+                      <select
+                        value={profile.mentorEmail}
+                        onChange={(e) => {
+                          const selected = mentorOptions.find((item) => item.email === e.target.value);
+                          setProfile({
+                            ...profile,
+                            mentorEmail: e.target.value,
+                            mentor: selected?.full_name || selected?.email || '',
+                          });
+                        }}
+                        className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none"
+                      >
+                        <option value="" disabled>{facultyLoading ? 'Loading mentors...' : 'Select Mentor'}</option>
+                        {mentorOptions.map((mentor) => (
+                          <option key={mentor.email} value={mentor.email}>{mentor.full_name || mentor.email}</option>
+                        ))}
                       </select>
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                         <ChevronDown className="h-5 w-5 text-gray-500" />
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-gray-900 ml-1">Advisor</label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Users className="h-5 w-5 text-gray-600" />
                       </div>
-                      <select value={profile.advisor} onChange={(e) => setProfile({...profile, advisor: e.target.value})} required className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none">
-                        <option value="" disabled>Select Advisor</option>
-                        {advisors.map(a => <option key={a} value={a}>{a}</option>)}
+                      <select
+                        value={profile.advisorEmail}
+                        onChange={(e) => {
+                          const selected = advisorOptions.find((item) => item.email === e.target.value);
+                          setProfile({
+                            ...profile,
+                            advisorEmail: e.target.value,
+                            advisor: selected?.full_name || selected?.email || '',
+                          });
+                        }}
+                        className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none"
+                      >
+                        <option value="" disabled>{facultyLoading ? 'Loading advisors...' : 'Select Advisor'}</option>
+                        {advisorOptions.map((advisor) => (
+                          <option key={advisor.email} value={advisor.email}>{advisor.full_name || advisor.email}</option>
+                        ))}
                       </select>
                       <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
                         <ChevronDown className="h-5 w-5 text-gray-500" />
@@ -397,12 +536,41 @@ export function StudentDashboard() {
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-gray-900 ml-1 flex items-center gap-1">HOD <ShieldCheck className="w-3 h-3 text-[#CD0000]" /></label>
-                    <input type="text" readOnly value={profile.hod} className="w-full px-4 py-3 bg-gray-100/80 border border-gray-200/60 rounded-xl outline-none text-gray-700 font-bold shadow-sm backdrop-blur-md cursor-not-allowed select-none" />
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <Users className="h-5 w-5 text-gray-600" />
+                      </div>
+                      <select
+                        value={profile.hodEmail}
+                        onChange={(e) => {
+                          const selected = hodOptions.find((item) => item.email === e.target.value);
+                          setProfile({
+                            ...profile,
+                            hodEmail: e.target.value,
+                            hod: selected?.full_name || selected?.email || '',
+                          });
+                        }}
+                        className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none"
+                      >
+                        <option value="" disabled>{facultyLoading ? 'Loading HODs...' : 'Select HOD'}</option>
+                        {hodOptions.map((hod) => (
+                          <option key={hod.email} value={hod.email}>{hod.full_name || hod.email}</option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <ChevronDown className="h-5 w-5 text-gray-500" />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-gray-900 ml-1 flex items-center gap-1">Principal <ShieldCheck className="w-3 h-3 text-[#CD0000]" /></label>
-                    <input type="text" readOnly value={profile.principal} className="w-full px-4 py-3 bg-gray-100/80 border border-gray-200/60 rounded-xl outline-none text-gray-700 font-bold shadow-sm backdrop-blur-md cursor-not-allowed select-none" />
+                    <input
+                      type="text"
+                      readOnly
+                      value={profile.principal || 'No principal account found for this institute'}
+                      className="w-full px-4 py-3 bg-gray-100/80 border border-gray-200/60 rounded-xl outline-none text-gray-700 font-bold shadow-sm backdrop-blur-md cursor-not-allowed select-none"
+                    />
                   </div>
                 </div>
               </div>
