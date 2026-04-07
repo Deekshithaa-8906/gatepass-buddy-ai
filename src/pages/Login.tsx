@@ -15,7 +15,7 @@ export function Login() {
     if (role === 'admin') return '/admin';
     if (role === 'principal') return '/principal-dashboard';
     if (role === 'warden') return '/warden-dashboard';
-    if (role === 'mentor' || role === 'advisor' || role === 'hod') return '/staff-dashboard';
+    if (role === 'staff' || role === 'mentor' || role === 'advisor' || role === 'hod') return '/staff-dashboard';
     return '/student-dashboard';
   };
 
@@ -24,9 +24,26 @@ export function Login() {
     setError('');
     setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const { error: authError } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (authError) {
-      setError('Invalid login credentials');
+      const { data: lookupUser } = await supabase
+        .from('user_directory')
+        .select('email, role, access_status, password_created')
+        .eq('email', normalizedEmail)
+        .maybeSingle();
+
+      if (lookupUser && lookupUser.password_created === false) {
+        setError('Password is not created for this account. Ask admin to click Resend Link from Recently Verified Users.');
+      } else if (lookupUser && lookupUser.access_status === 'pending_approval') {
+        setError('Your account is pending admin approval.');
+      } else if (lookupUser && lookupUser.access_status === 'rejected') {
+        setError('Your account request was rejected. Please contact admin.');
+      } else {
+        setError('Invalid login credentials');
+      }
+
       setLoading(false);
       return;
     }
@@ -34,7 +51,7 @@ export function Login() {
     const { data: directoryUser, error: dirError } = await supabase
       .from('user_directory')
       .select('email, role, access_status, account_status, password_created, onboarding_complete')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .maybeSingle();
 
     if (dirError) {

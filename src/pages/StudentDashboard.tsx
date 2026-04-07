@@ -20,27 +20,59 @@ import {
   ChevronDown,
   Users,
   ShieldCheck,
-  Mail
+  Mail,
+  AlertCircle,
+  Loader
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import bgImage from '../assets/sns-campus-bg.png';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '../components/ui/dialog';
+import { Button } from '../components/ui/button';
 
-type FacultyRole = 'mentor' | 'advisor' | 'hod' | 'principal';
+type FacultyRole = 'staff' | 'mentor' | 'advisor' | 'hod' | 'principal';
 
 type FacultyOption = {
+  id: string;
   full_name: string | null;
   email: string;
   role: FacultyRole;
   institute: string | null;
   department: string | null;
+  staff_department?: string | null;
+  hod_department?: string | null;
+  access_status?: string | null;
 };
 
 export function StudentDashboard() {
   const navigate = useNavigate();
   const { user, profile: accountProfile, refreshProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('outing');
+
+  // Form State for Outing/Leave Requests
+  const [outingForm, setOutingForm] = useState({
+    departureDateTime: '',
+    returnDateTime: '',
+    destination: '',
+    reason: '',
+  });
+  const [leaveForm, setLeaveForm] = useState({
+    departureDate: '',
+    returnDate: '',
+    destination: '',
+    reason: '',
+  });
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [mentorWarning, setMentorWarning] = useState(false);
+  const [formError, setFormError] = useState('');
 
   // Profile State
   const [profile, setProfile] = useState({
@@ -57,16 +89,22 @@ export function StudentDashboard() {
     hostelBlock: "A",
     roomNumber: "205",
     mentor: "",
+    mentorId: "",
     mentorEmail: "",
     advisor: "",
+    advisorId: "",
     advisorEmail: "",
     hod: "",
+    hodId: "",
     hodEmail: "",
     principal: "",
+    principalId: "",
     principalEmail: "",
   });
 
   const [facultyLoading, setFacultyLoading] = useState(false);
+  const [facultyError, setFacultyError] = useState('');
+  const [hodWarning, setHodWarning] = useState('');
   const [mentorOptions, setMentorOptions] = useState<FacultyOption[]>([]);
   const [advisorOptions, setAdvisorOptions] = useState<FacultyOption[]>([]);
   const [hodOptions, setHodOptions] = useState<FacultyOption[]>([]);
@@ -88,44 +126,20 @@ export function StudentDashboard() {
       classDetails: accountProfile.class_details || current.classDetails,
       hostelBlock: accountProfile.hostel_block || current.hostelBlock,
       roomNumber: accountProfile.room_number || current.roomNumber,
+      mentor: accountProfile.mentor || current.mentor,
+      mentorId: accountProfile.mentor_id || current.mentorId,
+      mentorEmail: accountProfile.mentor_email || current.mentorEmail,
+      advisor: accountProfile.advisor || current.advisor,
+      advisorId: accountProfile.advisor_id || current.advisorId,
+      advisorEmail: accountProfile.advisor_email || current.advisorEmail,
+      hod: accountProfile.hod || current.hod,
+      hodId: accountProfile.hod_id || current.hodId,
+      hodEmail: accountProfile.hod_email || current.hodEmail,
+      principal: accountProfile.principal || current.principal,
+      principalId: accountProfile.principal_id || current.principalId,
+      principalEmail: accountProfile.principal_email || current.principalEmail,
     }));
   }, [accountProfile]);
-
-  useEffect(() => {
-    if (!user?.email) return;
-
-    const loadSavedFacultyAssignments = async () => {
-      const { data, error } = await supabase
-        .from('user_directory')
-        .select('mentor, mentor_email, advisor, advisor_email, hod, hod_email, principal, principal_email')
-        .eq('email', user.email)
-        .maybeSingle();
-
-      if (error) {
-        // Ignore missing-column errors until DB migration is applied.
-        if (error.code !== '42703') {
-          console.error('Unable to load faculty assignments:', error);
-        }
-        return;
-      }
-
-      if (!data) return;
-
-      setProfile((current) => ({
-        ...current,
-        mentor: data.mentor || current.mentor,
-        mentorEmail: data.mentor_email || current.mentorEmail,
-        advisor: data.advisor || current.advisor,
-        advisorEmail: data.advisor_email || current.advisorEmail,
-        hod: data.hod || current.hod,
-        hodEmail: data.hod_email || current.hodEmail,
-        principal: data.principal || current.principal,
-        principalEmail: data.principal_email || current.principalEmail,
-      }));
-    };
-
-    void loadSavedFacultyAssignments();
-  }, [user?.email]);
 
   useEffect(() => {
     const institute = profile.institute?.trim();
@@ -134,48 +148,83 @@ export function StudentDashboard() {
 
     const loadFacultyOptions = async () => {
       setFacultyLoading(true);
+      setFacultyError('');
+      setHodWarning('');
 
       const { data, error } = await supabase
-        .from('user_directory')
-        .select('full_name, email, role, institute, department')
+        .from('user_profile_view')
+        .select('id, full_name, email, role, institute, department, staff_department, hod_department, access_status')
         .in('role', ['mentor', 'advisor', 'hod', 'principal'])
         .eq('institute', institute)
-        .eq('access_status', 'approved')
+        .in('access_status', ['approved', 'active'])
         .order('full_name', { ascending: true });
 
       if (error) {
         console.error('Unable to load faculty options:', error);
+        setFacultyError('Unable to load mentor/advisor/HOD/principal options. Please try again.');
         setFacultyLoading(false);
         return;
       }
 
       const rows = (data || []) as FacultyOption[];
 
-      const isDeptMatch = (row: FacultyOption) => (row.department || '').trim().toLowerCase() === department.toLowerCase();
+      const getRowDepartment = (row: FacultyOption) => (row.department || row.staff_department || row.hod_department || '').trim().toLowerCase();
+      const isDeptMatch = (row: FacultyOption) => getRowDepartment(row) === department.toLowerCase();
 
-      const mentors = rows.filter((row) => row.role === 'mentor' && isDeptMatch(row));
-      const advisors = rows.filter((row) => row.role === 'advisor' && isDeptMatch(row));
+      const staffRows = rows.filter((row) => ['mentor', 'advisor'].includes(row.role) && isDeptMatch(row));
+      const mentors = staffRows;
+      const advisors = staffRows;
       const hods = rows.filter((row) => row.role === 'hod' && isDeptMatch(row));
+      const singleHod = hods.length > 0 ? [hods[0]] : [];
       const principals = rows.filter((row) => row.role === 'principal');
+
+      if (hods.length > 1) {
+        setHodWarning('Multiple HOD records found for your department and campus. Using the first match.');
+      } else if (hods.length === 0) {
+        setHodWarning('No HOD found for your department and campus. Please contact admin.');
+      }
 
       setMentorOptions(mentors);
       setAdvisorOptions(advisors);
-      setHodOptions(hods);
+      setHodOptions(singleHod);
       setPrincipalOptions(principals);
+
+      const hodCandidate = singleHod[0];
+      if (hodCandidate) {
+        const hodName = hodCandidate.full_name || hodCandidate.email;
+        setProfile((current) => ({
+          ...current,
+          hod: hodName,
+          hodId: hodCandidate.id,
+          hodEmail: hodCandidate.email,
+        }));
+      }
 
       const principalCandidate = principals[0];
       if (principalCandidate) {
         const principalName = principalCandidate.full_name || principalCandidate.email;
         setProfile((current) => {
-          if (current.principalEmail === principalCandidate.email && current.principal === principalName) {
+          if (
+            current.principalEmail === principalCandidate.email &&
+            current.principal === principalName &&
+            current.principalId === principalCandidate.id
+          ) {
             return current;
           }
           return {
             ...current,
             principal: principalName,
+            principalId: principalCandidate.id,
             principalEmail: principalCandidate.email,
           };
         });
+      } else {
+        setProfile((current) => ({
+          ...current,
+          principal: '',
+          principalId: '',
+          principalEmail: '',
+        }));
       }
 
       setFacultyLoading(false);
@@ -206,39 +255,69 @@ export function StudentDashboard() {
     e.preventDefault();
     if (!user?.email) return;
 
-    const { error } = await supabase
-      .from('user_directory')
-      .update({
+    if (!profile.principalId) {
+      alert('Principal is not configured for your campus. Please contact admin before saving.');
+      return;
+    }
+
+    if (profile.mentorEmail && !mentorOptions.some((item) => item.email === profile.mentorEmail)) {
+      alert('Selected mentor is invalid for your department and campus.');
+      return;
+    }
+
+    if (profile.advisorEmail && !advisorOptions.some((item) => item.email === profile.advisorEmail)) {
+      alert('Selected advisor is invalid for your department and campus.');
+      return;
+    }
+
+    if (profile.hodEmail && !hodOptions.some((item) => item.email === profile.hodEmail)) {
+      alert('Selected HOD is invalid for your department and campus.');
+      return;
+    }
+
+    const userId = accountProfile?.id;
+    if (!userId) {
+      alert('Unable to resolve account profile. Please sign in again.');
+      return;
+    }
+
+    const { error: detailsError } = await supabase
+      .from('students_details')
+      .upsert({
+        user_id: userId,
         full_name: profile.fullName,
         register_number: profile.registerNumber,
         mobile_number: profile.mobile,
         parent_name: profile.parentName,
-        parent_mobile: profile.parentMobile,
+        parent_number: profile.parentMobile,
         gender: profile.gender,
         institute: profile.institute,
-        year_of_study: profile.year,
+        year: profile.year,
         class_details: profile.classDetails,
         department: profile.department,
         hostel_block: profile.hostelBlock,
         room_number: profile.roomNumber,
-        mentor: profile.mentor,
-        mentor_email: profile.mentorEmail,
-        advisor: profile.advisor,
-        advisor_email: profile.advisorEmail,
-        hod: profile.hod,
-        hod_email: profile.hodEmail,
-        principal: profile.principal,
-        principal_email: profile.principalEmail,
+        mentor_id: profile.mentorId || null,
+        advisor_id: profile.advisorId || null,
+        hod_id: profile.hodId || null,
+        principal_id: profile.principalId || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+    if (detailsError) {
+      alert('Unable to save profile changes. Please try again.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('user_directory')
+      .update({
         onboarding_complete: true,
         updated_at: new Date().toISOString(),
       })
       .eq('email', user.email);
 
     if (error) {
-      if (error.code === '42703') {
-        alert('Database columns for faculty assignments are missing. Please apply the latest DB migration and try again.');
-        return;
-      }
       alert('Unable to save profile changes. Please try again.');
       return;
     }
@@ -247,60 +326,330 @@ export function StudentDashboard() {
     alert('Profile changes saved successfully!');
   };
 
+  const handleSubmitOutingRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+
+    // Validate mentor is selected
+    if (!profile.mentorEmail || !profile.mentor) {
+      setMentorWarning(true);
+      return;
+    }
+
+    if (!user?.email) {
+      alert('Not authenticated');
+      return;
+    }
+
+    if (!outingForm.departureDateTime || !outingForm.returnDateTime || !outingForm.destination || !outingForm.reason) {
+      setFormError('Please fill in all fields');
+      return;
+    }
+
+    setFormSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('outing_requests')
+        .insert({
+          student_email: user.email,
+          student_name: profile.fullName,
+          mentor_email: profile.mentorEmail,
+          departure_datetime: new Date(outingForm.departureDateTime).toISOString(),
+          return_datetime: new Date(outingForm.returnDateTime).toISOString(),
+          destination: outingForm.destination,
+          reason: outingForm.reason,
+          status: 'pending',
+          approval_chain: ['mentor'],
+          current_approver: 'mentor',
+        });
+
+      if (error) {
+        console.error('Error submitting outing request:', error);
+        setFormError(error.message || 'Failed to submit request. Please try again.');
+        return;
+      }
+
+      // Reset form
+      setOutingForm({
+        departureDateTime: '',
+        returnDateTime: '',
+        destination: '',
+        reason: '',
+      });
+
+      alert('Outing request submitted successfully! Your mentor will review it shortly.');
+      setActiveTab('status');
+    } catch (err) {
+      console.error('Error:', err);
+      setFormError('An unexpected error occurred. Please try again.');
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleSubmitLeaveRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+
+    // Validate mentor is selected
+    if (!profile.mentorEmail || !profile.mentor) {
+      setMentorWarning(true);
+      return;
+    }
+
+    if (!user?.email) {
+      alert('Not authenticated');
+      return;
+    }
+
+    if (!leaveForm.departureDate || !leaveForm.returnDate || !leaveForm.destination || !leaveForm.reason) {
+      setFormError('Please fill in all fields');
+      return;
+    }
+
+    setFormSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('leave_requests')
+        .insert({
+          student_email: user.email,
+          student_name: profile.fullName,
+          mentor_email: profile.mentorEmail,
+          departure_date: leaveForm.departureDate,
+          return_date: leaveForm.returnDate,
+          destination: leaveForm.destination,
+          reason: leaveForm.reason,
+          status: 'pending',
+          approval_chain: ['mentor'],
+          current_approver: 'mentor',
+        });
+
+      if (error) {
+        console.error('Error submitting leave request:', error);
+        setFormError(error.message || 'Failed to submit request. Please try again.');
+        return;
+      }
+
+      // Reset form
+      setLeaveForm({
+        departureDate: '',
+        returnDate: '',
+        destination: '',
+        reason: '',
+      });
+
+      alert('Leave request submitted successfully! Your mentor will review it shortly.');
+      setActiveTab('status');
+    } catch (err) {
+      console.error('Error:', err);
+      setFormError('An unexpected error occurred. Please try again.');
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'outing':
       case 'leave':
         return (
-          <div className="bg-white/40 backdrop-blur-2xl rounded-3xl shadow-xl border border-white/60 p-8 sm:p-10 transition-all duration-300">
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-                {activeTab === 'outing' ? <Map className="w-6 h-6 text-[#CD0000]" /> : <FileText className="w-6 h-6 text-[#CD0000]" />}
-                {activeTab === 'outing' ? 'Request Outing Pass' : 'Request Leave Pass'}
-              </h2>
-              <p className="text-gray-800 font-medium mt-1">Fill out the form below to submit your {activeTab} request.</p>
+          <>
+            <div className="bg-white/40 backdrop-blur-2xl rounded-3xl shadow-xl border border-white/60 p-8 sm:p-10 transition-all duration-300">
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
+                  {activeTab === 'outing' ? <Map className="w-6 h-6 text-[#CD0000]" /> : <FileText className="w-6 h-6 text-[#CD0000]" />}
+                  {activeTab === 'outing' ? 'Request Outing Pass' : 'Request Leave Pass'}
+                </h2>
+                <p className="text-gray-800 font-medium mt-1">Fill out the form below to submit your {activeTab} request.</p>
+              </div>
+
+              {/* Mentor Assignment Warning */}
+              {(!profile.mentor || !profile.mentorEmail) && (
+                <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-yellow-900">Mentor Not Assigned</p>
+                    <p className="text-yellow-800 text-sm mt-1">You must select a mentor in your Profile Settings before submitting a {activeTab} request.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Form Error */}
+              {formError && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-red-900">{formError}</p>
+                  </div>
+                </div>
+              )}
+
+              <form className="space-y-6" onSubmit={activeTab === 'outing' ? handleSubmitOutingRequest : handleSubmitLeaveRequest}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {activeTab === 'outing' ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Departure Date & Time</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Calendar className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <input 
+                            type="datetime-local" 
+                            required 
+                            value={outingForm.departureDateTime}
+                            onChange={(e) => setOutingForm({...outingForm, departureDateTime: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Return Date & Time</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Clock className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <input 
+                            type="datetime-local" 
+                            required 
+                            value={outingForm.returnDateTime}
+                            onChange={(e) => setOutingForm({...outingForm, returnDateTime: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Destination / Address</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <MapPin className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <input 
+                            type="text" 
+                            required 
+                            placeholder="Where are you going?" 
+                            value={outingForm.destination}
+                            onChange={(e) => setOutingForm({...outingForm, destination: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Reason</label>
+                        <textarea 
+                          required 
+                          rows={4} 
+                          placeholder="Detailed reason for outing..."
+                          value={outingForm.reason}
+                          onChange={(e) => setOutingForm({...outingForm, reason: e.target.value})}
+                          className="w-full p-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"
+                        ></textarea>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Departure Date</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Calendar className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <input 
+                            type="date" 
+                            required 
+                            value={leaveForm.departureDate}
+                            onChange={(e) => setLeaveForm({...leaveForm, departureDate: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Return Date</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Clock className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <input 
+                            type="date" 
+                            required 
+                            value={leaveForm.returnDate}
+                            onChange={(e) => setLeaveForm({...leaveForm, returnDate: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Destination / Address</label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <MapPin className="h-5 w-5 text-gray-600" />
+                          </div>
+                          <input 
+                            type="text" 
+                            required 
+                            placeholder="Where are you going?" 
+                            value={leaveForm.destination}
+                            onChange={(e) => setLeaveForm({...leaveForm, destination: e.target.value})}
+                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Reason</label>
+                        <textarea 
+                          required 
+                          rows={4} 
+                          placeholder="Detailed reason for leave..."
+                          value={leaveForm.reason}
+                          onChange={(e) => setLeaveForm({...leaveForm, reason: e.target.value})}
+                          className="w-full p-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"
+                        ></textarea>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="pt-4 flex justify-end">
+                  <button 
+                    type="submit" 
+                    disabled={formSubmitting}
+                    className="w-full sm:w-auto px-8 py-3 bg-[#CD0000] hover:bg-[#a80000] disabled:bg-gray-400 text-white rounded-xl font-bold transition-all shadow-md hover:shadow-lg active:scale-95 text-center flex items-center justify-center gap-2"
+                  >
+                    {formSubmitting && <Loader className="w-4 h-4 animate-spin" />}
+                    Submit Request
+                  </button>
+                </div>
+              </form>
             </div>
-            <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); alert("Request submitted successfully!"); }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-900 ml-1">Departure Date & Time</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Calendar className="h-5 w-5 text-gray-600" />
-                    </div>
-                    <input type="datetime-local" required className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-900 ml-1">Return Date & Time</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Clock className="h-5 w-5 text-gray-600" />
-                    </div>
-                    <input type="datetime-local" required className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" />
-                  </div>
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-sm font-semibold text-gray-900 ml-1">Destination / Address</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <MapPin className="h-5 w-5 text-gray-600" />
-                    </div>
-                    <input type="text" required placeholder="Where are you going?" className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" />
-                  </div>
-                </div>
-                <div className="space-y-1.5 md:col-span-2">
-                  <label className="text-sm font-semibold text-gray-900 ml-1">Reason</label>
-                  <textarea required rows={4} placeholder={`Detailed reason for ${activeTab}...`} className="w-full p-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"></textarea>
-                </div>
-              </div>
-              <div className="pt-4 flex justify-end">
-                <button type="submit" className="w-full sm:w-auto px-8 py-3 bg-[#CD0000] hover:bg-[#a80000] text-white rounded-xl font-bold transition-all shadow-md hover:shadow-lg active:scale-95 text-center">
-                  Submit Request
-                </button>
-              </div>
-            </form>
-          </div>
+
+            {/* Mentor Validation Modal */}
+            <Dialog open={mentorWarning} onOpenChange={setMentorWarning}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-yellow-600" />
+                    Select a Mentor First
+                  </DialogTitle>
+                  <DialogDescription>
+                    To submit an outing or leave request, you must first select a mentor in your Profile Settings. Your mentor will receive and review your requests.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setMentorWarning(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    className="bg-[#CD0000] hover:bg-[#a80000]"
+                    onClick={() => {
+                      setMentorWarning(false);
+                      setActiveTab('profile');
+                    }}
+                  >
+                    Go to Profile Settings
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </>
         );
       case 'complaint':
         return (
@@ -475,6 +824,21 @@ export function StudentDashboard() {
 
               <div>
                 <h3 className="text-lg font-bold text-gray-900 border-b border-gray-300 pb-2 mb-4">Faculty Incharge Details</h3>
+                {(facultyError || hodWarning || !profile.principalId) && (
+                  <div className="mb-4 space-y-2">
+                    {facultyError && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-semibold">{facultyError}</div>
+                    )}
+                    {hodWarning && (
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-sm text-yellow-800 font-semibold">{hodWarning}</div>
+                    )}
+                    {!profile.principalId && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-semibold">
+                        No Principal found for your campus. You cannot save profile until one is assigned.
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-1.5">
                     <label className="text-sm font-semibold text-gray-900 ml-1">Mentor</label>
@@ -488,13 +852,14 @@ export function StudentDashboard() {
                           const selected = mentorOptions.find((item) => item.email === e.target.value);
                           setProfile({
                             ...profile,
+                            mentorId: selected?.id || '',
                             mentorEmail: e.target.value,
                             mentor: selected?.full_name || selected?.email || '',
                           });
                         }}
                         className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none"
                       >
-                        <option value="" disabled>{facultyLoading ? 'Loading mentors...' : 'Select Mentor'}</option>
+                        <option value="">{facultyLoading ? 'Loading mentors...' : mentorOptions.length ? 'Select Mentor' : 'No mentors available'}</option>
                         {mentorOptions.map((mentor) => (
                           <option key={mentor.email} value={mentor.email}>{mentor.full_name || mentor.email}</option>
                         ))}
@@ -517,13 +882,14 @@ export function StudentDashboard() {
                           const selected = advisorOptions.find((item) => item.email === e.target.value);
                           setProfile({
                             ...profile,
+                            advisorId: selected?.id || '',
                             advisorEmail: e.target.value,
                             advisor: selected?.full_name || selected?.email || '',
                           });
                         }}
                         className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none"
                       >
-                        <option value="" disabled>{facultyLoading ? 'Loading advisors...' : 'Select Advisor'}</option>
+                        <option value="">{facultyLoading ? 'Loading advisors...' : advisorOptions.length ? 'Select Advisor' : 'No advisors available'}</option>
                         {advisorOptions.map((advisor) => (
                           <option key={advisor.email} value={advisor.email}>{advisor.full_name || advisor.email}</option>
                         ))}
@@ -546,13 +912,14 @@ export function StudentDashboard() {
                           const selected = hodOptions.find((item) => item.email === e.target.value);
                           setProfile({
                             ...profile,
+                            hodId: selected?.id || '',
                             hodEmail: e.target.value,
                             hod: selected?.full_name || selected?.email || '',
                           });
                         }}
                         className="w-full pl-10 pr-10 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md appearance-none"
                       >
-                        <option value="" disabled>{facultyLoading ? 'Loading HODs...' : 'Select HOD'}</option>
+                        <option value="">{facultyLoading ? 'Loading HODs...' : hodOptions.length ? 'Select HOD' : 'No HOD available'}</option>
                         {hodOptions.map((hod) => (
                           <option key={hod.email} value={hod.email}>{hod.full_name || hod.email}</option>
                         ))}
@@ -568,7 +935,7 @@ export function StudentDashboard() {
                     <input
                       type="text"
                       readOnly
-                      value={profile.principal || 'No principal account found for this institute'}
+                      value={profile.principal || 'No principal account found for this campus'}
                       className="w-full px-4 py-3 bg-gray-100/80 border border-gray-200/60 rounded-xl outline-none text-gray-700 font-bold shadow-sm backdrop-blur-md cursor-not-allowed select-none"
                     />
                   </div>

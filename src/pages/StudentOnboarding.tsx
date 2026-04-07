@@ -26,34 +26,65 @@ export function StudentOnboarding() {
   const routeByRole = (role?: string) => {
     if (role === 'principal') return '/principal-dashboard';
     if (role === 'warden') return '/warden-dashboard';
-    if (role === 'mentor' || role === 'advisor' || role === 'hod') return '/staff-dashboard';
+    if (role === 'staff' || role === 'mentor' || role === 'advisor' || role === 'hod') return '/staff-dashboard';
     return '/student-dashboard';
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const payload = {
+    const studentPayload = {
       full_name: String(formData.get('full_name') || ''),
       class_details: String(formData.get('class_details') || ''),
       register_number: String(formData.get('register_number') || ''),
       mobile_number: String(formData.get('mobile_number') || ''),
       parent_name: String(formData.get('parent_name') || ''),
-      parent_mobile: String(formData.get('parent_mobile') || ''),
+      parent_number: String(formData.get('parent_mobile') || ''),
       gender: String(formData.get('gender') || ''),
       institute: String(formData.get('institute') || ''),
-      year_of_study: String(formData.get('year_of_study') || ''),
+      year: String(formData.get('year_of_study') || ''),
       hostel_block: String(formData.get('hostel_block') || ''),
       room_number: String(formData.get('room_number') || ''),
       department: selectedDepartment === 'Other' ? String(formData.get('department_other') || '') : selectedDepartment,
+      updated_at: new Date().toISOString(),
+    };
+
+    const accountPayload = {
       onboarding_complete: true,
       status: 'active',
       account_status: 'active',
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from('user_directory').update(payload).eq('email', user?.email ?? '');
-    if (error) {
+    const { data: accountRow, error: accountLookupError } = await supabase
+      .from('user_directory')
+      .select('id')
+      .eq('email', user?.email ?? '')
+      .maybeSingle();
+
+    if (accountLookupError || !accountRow?.id) {
+      alert('Failed to resolve account for onboarding. Please try again.');
+      return;
+    }
+
+    const { error: studentError } = await supabase
+      .from('students_details')
+      .upsert({
+        user_id: accountRow.id,
+        ...studentPayload,
+      }, { onConflict: 'user_id' });
+
+    if (studentError) {
+      alert('Failed to save student details. Please try again.');
+      return;
+    }
+
+    const { error: accountError } = await supabase
+      .from('user_directory')
+      .update(accountPayload)
+      .eq('email', user?.email ?? '');
+
+    if (accountError) {
       alert('Failed to complete onboarding. Please try again.');
       return;
     }

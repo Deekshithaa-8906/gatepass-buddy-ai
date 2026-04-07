@@ -29,18 +29,81 @@ type DirectoryUser = {
   created_at?: string | null;
 };
 
-const roleTabs = ['student', 'mentor', 'advisor', 'hod', 'principal'] as const;
+const roleTabs = ['student', 'staff', 'hod', 'warden', 'principal'] as const;
 
 type RoleTab = (typeof roleTabs)[number];
 type GenderFilter = 'boys' | 'girls';
 
+function normalizeStatus(value?: string | null) {
+  return (value || '').trim().toLowerCase();
+}
+
+function isRejectedUser(user: DirectoryUser) {
+  const access = normalizeStatus(user.access_status);
+  const status = normalizeStatus(user.status);
+  return access === 'rejected' || status === 'rejected';
+}
+
+function isPendingRequest(user: DirectoryUser) {
+  const access = normalizeStatus(user.access_status);
+  const status = normalizeStatus(user.status);
+  return (
+    access === 'pending_approval' ||
+    access === 'pending approval' ||
+    access === 'pending-approval' ||
+    status === 'pending'
+  );
+}
+
+function isDirectoryVisible(user: DirectoryUser) {
+  if (isRejectedUser(user)) return false;
+  if (isPendingRequest(user)) return false;
+  return true;
+}
+
+function isApprovedUser(user: DirectoryUser) {
+  const access = normalizeStatus(user.access_status);
+  const status = normalizeStatus(user.status);
+  return (
+    access === 'approved' ||
+    access === 'active' ||
+    status === 'approved' ||
+    status === 'active'
+  );
+}
+
+function isRecentlyVerifiedUser(user: DirectoryUser) {
+  if (!isApprovedUser(user)) return false;
+  if (normalizeStatus(user.role) === 'admin') return false;
+  if (user.onboarding_complete) return false;
+  return user.password_created === false || user.password_created === null || user.password_created === undefined;
+}
+
 export function AdminDashboard() {
   const [activeMenu, setActiveMenu] = useState<'overview' | 'manage'>('overview');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#f7f8fb] flex font-sans text-gray-900">
-      <aside className="w-64 shrink-0 bg-white border-r border-gray-200 flex flex-col shadow-sm">
-        <div className="p-6 border-b border-gray-100 flex items-center gap-3">
+    <div className="min-h-screen bg-[#f7f8fb] flex flex-col sm:flex-row font-sans text-gray-900">
+      {/* Mobile Header */}
+      <div className="sm:hidden bg-white border-b border-gray-200 px-4 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+        <div className="flex items-center gap-2">
+          <div className="bg-[#CD0000] p-1.5 rounded-lg shadow-sm">
+            <ShieldCheck className="w-5 h-5 text-white" />
+          </div>
+          <span className="font-bold tracking-tight">Admin</span>
+        </div>
+        <button 
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-2 hover:bg-gray-100 rounded-lg"
+        >
+          <Users className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Sidebar */}
+      <aside className={`${sidebarOpen ? 'block' : 'hidden'} sm:block w-full sm:w-64 sm:shrink-0 bg-white border-b sm:border-b-0 sm:border-r border-gray-200 flex flex-col shadow-sm sm:shadow-none absolute sm:relative top-16 sm:top-0 left-0 right-0 sm:h-auto z-10`}>
+        <div className="hidden sm:flex p-6 border-b border-gray-100 items-center gap-3">
           <div className="bg-[#CD0000] p-2 rounded-xl shadow-sm">
             <ShieldCheck className="w-6 h-6 text-white" />
           </div>
@@ -49,34 +112,40 @@ export function AdminDashboard() {
 
         <nav className="flex-1 px-3 py-4 space-y-2">
           <button
-            onClick={() => setActiveMenu('overview')}
+            onClick={() => {
+              setActiveMenu('overview');
+              setSidebarOpen(false);
+            }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-colors ${activeMenu === 'overview' ? 'bg-[#CD0000]/10 text-[#CD0000]' : 'text-gray-600 hover:bg-gray-100'}`}
           >
             <Users className="w-5 h-5" />
-            Account Requests
+            <span>Account Requests</span>
           </button>
           <button
-            onClick={() => setActiveMenu('manage')}
+            onClick={() => {
+              setActiveMenu('manage');
+              setSidebarOpen(false);
+            }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-colors ${activeMenu === 'manage' ? 'bg-[#CD0000]/10 text-[#CD0000]' : 'text-gray-600 hover:bg-gray-100'}`}
           >
             <UserPlus className="w-5 h-5" />
-            Manage Users
+            <span>Manage Users</span>
           </button>
         </nav>
 
         <div className="p-4 border-t border-gray-100">
           <Link to="/login" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-gray-600 hover:bg-gray-100 transition-colors">
             <LogOut className="w-5 h-5" />
-            Sign Out
+            <span>Sign Out</span>
           </Link>
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 h-screen overflow-auto">
-        <header className="bg-white border-b border-gray-200 px-6 sm:px-8 py-5 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">{activeMenu === 'overview' ? 'Overview' : 'Manage Users'}</h1>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:block text-right leading-tight">
+      <main className="flex-1 min-w-0 flex flex-col">
+        <header className="bg-white border-b border-gray-200 px-4 sm:px-8 py-5 flex items-center justify-between sticky top-0 sm:top-auto z-10 shadow-sm">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900">{activeMenu === 'overview' ? 'Overview' : 'Manage Users'}</h1>
+          <div className="hidden sm:flex items-center gap-3">
+            <div className="text-right leading-tight">
               <div className="font-semibold text-gray-900">System Admin</div>
               <div className="text-xs text-gray-500">admin@snsgroups.com</div>
             </div>
@@ -84,7 +153,7 @@ export function AdminDashboard() {
           </div>
         </header>
 
-        <div className="p-4 sm:p-6 lg:p-8">
+        <div className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8">
           {activeMenu === 'overview' ? <OverviewTab /> : <ManageUsersTab />}
         </div>
       </main>
@@ -109,11 +178,10 @@ function PendingRequestsSection() {
     const { data, error } = await supabase
       .from('user_directory')
       .select('email, full_name, role, department, created_at, access_status, status')
-      .eq('access_status', 'pending_approval')
       .order('created_at', { ascending: false });
 
     if (!error) {
-      setRequests(data || []);
+      setRequests((data || []).filter((row) => isPendingRequest(row as DirectoryUser)));
     }
     setLoading(false);
   };
@@ -202,47 +270,48 @@ function PendingRequestsSection() {
         <div className="p-12 text-center text-gray-500">No pending requests</div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left">
+          <table className="w-full text-left text-sm sm:text-base">
             <thead>
-              <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                <th className="px-6 py-4 font-semibold">User Details</th>
-                <th className="px-6 py-4 font-semibold">Requested Role</th>
-                <th className="px-6 py-4 font-semibold">Department</th>
-                <th className="px-6 py-4 font-semibold">Date</th>
-                <th className="px-6 py-4 font-semibold text-right">Actions</th>
+              <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                <th className="px-3 sm:px-6 py-3 sm:py-4 font-semibold">User Details</th>
+                <th className="hidden sm:table-cell px-6 py-4 font-semibold">Requested Role</th>
+                <th className="hidden md:table-cell px-6 py-4 font-semibold">Department</th>
+                <th className="hidden lg:table-cell px-6 py-4 font-semibold">Date</th>
+                <th className="px-3 sm:px-6 py-3 sm:py-4 font-semibold text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {requests.map((request) => (
                 <tr key={request.email} className="hover:bg-gray-50/60">
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-gray-900">{request.full_name || 'New Applicant'}</div>
-                    <div className="text-sm text-gray-500">{request.email}</div>
+                  <td className="px-3 sm:px-6 py-3 sm:py-4">
+                    <div className="font-semibold text-gray-900 text-sm sm:text-base">{request.full_name || 'New Applicant'}</div>
+                    <div className="text-xs sm:text-sm text-gray-500">{request.email}</div>
+                    <div className="sm:hidden text-xs text-gray-600 font-medium capitalize">{request.role}</div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="hidden sm:table-cell px-6 py-4">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-[#CD0000]/10 text-[#CD0000] capitalize">
                       {request.role}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{request.department || '-'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{request.created_at ? new Date(request.created_at).toLocaleDateString() : '-'}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2">
+                  <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-700">{request.department || '-'}</td>
+                  <td className="hidden lg:table-cell px-6 py-4 text-sm text-gray-500">{request.created_at ? new Date(request.created_at).toLocaleDateString() : '-'}</td>
+                  <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
+                    <div className="flex justify-end gap-1 sm:gap-2">
                       <button
                         disabled={workingEmail !== null}
                         onClick={() => approveRequest(request.email)}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50"
+                        className="p-1.5 sm:p-2 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50 transition-colors"
                         title="Approve"
                       >
-                        <Check className="w-5 h-5" />
+                        <Check className="w-4 h-4 sm:w-5 sm:h-5" />
                       </button>
                       <button
                         disabled={workingEmail !== null}
                         onClick={() => rejectRequest(request.email)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                        className="p-1.5 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50 transition-colors"
                         title="Reject"
                       >
-                        <X className="w-5 h-5" />
+                        <X className="w-4 h-4 sm:w-5 sm:h-5" />
                       </button>
                     </div>
                   </td>
@@ -293,15 +362,21 @@ function VerifyAndAddUsersSection() {
 
   const loadVerifiedUsers = async () => {
     const { data, error } = await supabase
-      .from('user_directory')
-      .select('email, full_name, role, department, room_number, created_at, access_status, onboarding_complete, status')
-      .eq('access_status', 'approved')
-      .eq('onboarding_complete', false)
+      .from('user_profile_view')
+      .select('email, full_name, role, department, room_number, created_at, access_status, onboarding_complete, status, password_created')
+      .or('onboarding_complete.is.false,onboarding_complete.is.null')
       .order('created_at', { ascending: false });
 
     if (!error) {
-      setVerifiedUsers(data || []);
+      const rows = (data || []) as DirectoryUser[];
+      setVerifiedUsers(
+        rows.filter((row) => isRecentlyVerifiedUser(row))
+      );
+    } else {
+      console.error('Unable to load recently verified users:', error);
+      setVerifiedUsers([]);
     }
+
     setLoadingVerified(false);
   };
 
@@ -310,6 +385,11 @@ function VerifyAndAddUsersSection() {
     const channel = supabase
       .channel('admin-verified-users')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_directory' }, loadVerifiedUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students_details' }, loadVerifiedUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_details' }, loadVerifiedUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hod_details' }, loadVerifiedUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'principal_details' }, loadVerifiedUsers)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warden_details' }, loadVerifiedUsers)
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
@@ -419,9 +499,9 @@ function VerifyAndAddUsersSection() {
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-900 font-medium focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 outline-none appearance-none transition-all cursor-pointer"
               >
                 <option value="student">Student</option>
-                <option value="mentor">Teacher</option>
-                <option value="advisor">Advisor</option>
+                <option value="staff">Staff</option>
                 <option value="hod">HOD</option>
+                <option value="warden">Warden</option>
                 <option value="principal">Principal</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-600">
@@ -521,13 +601,12 @@ function DirectorySection() {
 
   const loadDirectory = async () => {
     const { data, error } = await supabase
-      .from('user_directory')
+      .from('user_profile_view')
       .select('email, full_name, role, gender, department, room_number, status, access_status, onboarding_complete, created_at')
-      .eq('access_status', 'approved')
       .order('created_at', { ascending: false });
 
     if (!error) {
-      setUsers(data || []);
+      setUsers(((data || []) as DirectoryUser[]).filter((row) => isDirectoryVisible(row)));
     }
     setLoading(false);
   };
@@ -537,6 +616,11 @@ function DirectorySection() {
     const channel = supabase
       .channel('admin-directory')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_directory' }, loadDirectory)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students_details' }, loadDirectory)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'staff_details' }, loadDirectory)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hod_details' }, loadDirectory)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'principal_details' }, loadDirectory)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'warden_details' }, loadDirectory)
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
@@ -548,13 +632,20 @@ function DirectorySection() {
     const normalizedSearch = searchText.trim().toLowerCase();
 
     return users.filter((user) => {
-      if (user.role !== activeRole) return false;
+      const normalizedRole = (user.role || '').toLowerCase();
+      if (activeRole === 'staff') {
+        if (!['staff', 'mentor', 'advisor'].includes(normalizedRole)) return false;
+      } else if (normalizedRole !== activeRole) {
+        return false;
+      }
       if (department && (user.department || '') !== department) return false;
 
       if (activeRole === 'student') {
         const gender = (user.gender || '').toLowerCase();
-        if (studentGender === 'boys' && !['male', 'm', 'boy', 'boys'].includes(gender)) return false;
-        if (studentGender === 'girls' && !['female', 'f', 'girl', 'girls'].includes(gender)) return false;
+        if (gender) {
+          if (studentGender === 'boys' && !['male', 'm', 'boy', 'boys'].includes(gender)) return false;
+          if (studentGender === 'girls' && !['female', 'f', 'girl', 'girls'].includes(gender)) return false;
+        }
         if (normalizedRoom && (user.room_number || '').toLowerCase() !== normalizedRoom) return false;
       }
 
@@ -574,44 +665,44 @@ function DirectorySection() {
           <button
             key={role}
             onClick={() => setActiveRole(role)}
-            className={`px-7 py-4 text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeRole === role ? 'border-[#CD0000] text-[#CD0000] bg-white' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+            className={`px-3 sm:px-7 py-3 sm:py-4 text-xs sm:text-sm font-bold whitespace-nowrap border-b-2 transition-colors ${activeRole === role ? 'border-[#CD0000] text-[#CD0000] bg-white' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
           >
-            {role === 'student' ? 'Students' : role === 'mentor' ? 'Mentors' : role === 'advisor' ? 'Advisor' : role === 'hod' ? 'HOD' : 'Principal'}
+            {role === 'student' ? 'Students' : role === 'staff' ? 'Staff' : role === 'hod' ? 'HODs' : role === 'warden' ? 'Wardens' : 'Principals'}
           </button>
         ))}
       </div>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         {activeRole === 'student' ? (
           <>
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between mb-5">
+            <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-5">
               <div>
-                <h3 className="text-2xl font-bold text-gray-900">Manage Students ({studentGender === 'boys' ? 'Boys' : 'Girls'})</h3>
-                <div className="mt-4 inline-flex p-1 rounded-xl bg-gray-100 border border-gray-200 shadow-sm">
+                <h3 className="text-lg sm:text-2xl font-bold text-gray-900">Manage Students ({studentGender === 'boys' ? 'Boys' : 'Girls'})</h3>
+                <div className="mt-3 sm:mt-4 inline-flex p-1 rounded-xl bg-gray-100 border border-gray-200 shadow-sm">
                   <button
                     type="button"
                     onClick={() => setStudentGender('boys')}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${studentGender === 'boys' ? 'bg-white text-[#CD0000] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${studentGender === 'boys' ? 'bg-white text-[#CD0000] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     Boys
                   </button>
                   <button
                     type="button"
                     onClick={() => setStudentGender('girls')}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${studentGender === 'girls' ? 'bg-white text-[#CD0000] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                    className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${studentGender === 'girls' ? 'bg-white text-[#CD0000] shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
                   >
                     Girls
                   </button>
                 </div>
               </div>
 
-              <div className="grid gap-3 w-full xl:w-auto xl:grid-cols-3">
+              <div className="grid gap-2 sm:gap-3 w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="relative">
                   <Filter className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                   <select
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    className="w-full xl:w-56 pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
+                    className="w-full pl-9 pr-3 sm:pr-4 py-2 sm:py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
                   >
                     <option value="">All Departments</option>
                     {departments.map((item) => (
@@ -626,7 +717,7 @@ function DirectorySection() {
                     value={roomNumber}
                     onChange={(e) => setRoomNumber(e.target.value)}
                     placeholder="All Rooms"
-                    className="w-full xl:w-40 pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
+                    className="w-full pl-9 pr-3 sm:pr-4 py-2 sm:py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
                   />
                 </div>
 
@@ -636,22 +727,22 @@ function DirectorySection() {
                     value={searchText}
                     onChange={(e) => setSearchText(e.target.value)}
                     placeholder="Search accounts..."
-                    className="w-full xl:w-80 pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
+                    className="w-full pl-9 pr-3 sm:pr-4 py-2 sm:py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
                   />
                 </div>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between mb-5">
-            <h3 className="text-2xl font-bold text-gray-900">Manage {roleLabel(activeRole)}s</h3>
-            <div className="relative w-full xl:w-80">
+          <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-5">
+            <h3 className="text-lg sm:text-2xl font-bold text-gray-900">Manage {roleLabel(activeRole)}s</h3>
+            <div className="relative w-full">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 placeholder="Search accounts..."
-                className="w-full pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
+                className="w-full pl-9 pr-3 sm:pr-4 py-2 sm:py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20"
               />
             </div>
           </div>
@@ -664,36 +755,37 @@ function DirectorySection() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px] text-left">
+              <table className="w-full text-left text-sm sm:text-base">
                 <thead>
                   <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
-                    <th className="px-6 py-4 font-semibold">User Details</th>
-                    <th className="px-6 py-4 font-semibold">Role</th>
-                    <th className="px-6 py-4 font-semibold">Department</th>
-                    {activeRole === 'student' && <th className="px-6 py-4 font-semibold">Room No.</th>}
-                    <th className="px-6 py-4 font-semibold">Status</th>
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-semibold">User Details</th>
+                    <th className="hidden sm:table-cell px-6 py-4 font-semibold">Role</th>
+                    <th className="hidden md:table-cell px-6 py-4 font-semibold">Department</th>
+                    {activeRole === 'student' && <th className="hidden lg:table-cell px-6 py-4 font-semibold">Room</th>}
+                    <th className="px-3 sm:px-6 py-3 sm:py-4 font-semibold">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={activeRole === 'student' ? 5 : 4} className="px-6 py-10 text-center text-gray-500">
+                      <td colSpan={activeRole === 'student' ? 5 : 4} className="px-3 sm:px-6 py-6 sm:py-10 text-center text-sm text-gray-500">
                         No users found for selected filters.
                       </td>
                     </tr>
                   ) : (
                     filteredUsers.map((user) => (
                       <tr key={user.email} className="hover:bg-gray-50/60">
-                        <td className="px-6 py-4">
-                          <div className="font-semibold text-gray-900">{user.full_name || 'User'}</div>
-                          <div className="text-sm text-gray-500">{user.email}{user.gender ? ` • ${user.gender}` : ''}</div>
+                        <td className="px-3 sm:px-6 py-3 sm:py-4">
+                          <div className="font-semibold text-gray-900 text-sm sm:text-base">{user.full_name || 'User'}</div>
+                          <div className="text-xs sm:text-sm text-gray-500">{user.email}{user.gender ? ` • ${user.gender}` : ''}</div>
+                          <div className="sm:hidden text-xs text-gray-600 font-medium capitalize">{user.role}</div>
                         </td>
-                        <td className="px-6 py-4 text-sm font-medium text-gray-700 capitalize">{user.role}</td>
-                        <td className="px-6 py-4 text-sm text-gray-700">{user.department || '-'}</td>
-                        {activeRole === 'student' && <td className="px-6 py-4 text-sm text-gray-700">{user.room_number || '-'}</td>}
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${user.onboarding_complete ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                            {user.onboarding_complete ? 'Active' : 'Not Onboarded'}
+                        <td className="hidden sm:table-cell px-6 py-4 text-sm font-medium text-gray-700 capitalize">{user.role}</td>
+                        <td className="hidden md:table-cell px-6 py-4 text-sm text-gray-700">{user.department || '-'}</td>
+                        {activeRole === 'student' && <td className="hidden lg:table-cell px-6 py-4 text-sm text-gray-700">{user.room_number || '-'}</td>}
+                        <td className="px-3 sm:px-6 py-3 sm:py-4">
+                          <span className={`inline-flex items-center px-2 sm:px-2.5 py-1 rounded-full text-xs font-bold border ${user.onboarding_complete ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                            {user.onboarding_complete ? 'Active' : 'Pending'}
                           </span>
                         </td>
                       </tr>
@@ -710,6 +802,6 @@ function DirectorySection() {
 }
 
 function roleLabel(role: RoleTab) {
-  if (role === 'mentor') return 'Teacher';
+  if (role === 'staff') return 'Staff';
   return role.charAt(0).toUpperCase() + role.slice(1);
 }

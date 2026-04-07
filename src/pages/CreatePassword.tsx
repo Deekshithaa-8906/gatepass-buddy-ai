@@ -5,7 +5,7 @@ import bgImage from '../assets/sns-campus-bg.png';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
-type AppRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'admin';
+type AppRole = 'student' | 'staff' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'admin';
 
 const getPasswordChecks = (value: string) => ({
   minLength: value.length >= 8,
@@ -47,7 +47,7 @@ export function CreatePassword() {
     if (profile?.password_created) {
       if (profile.role === 'student' && !profile.onboarding_complete) {
         navigate('/student-onboarding');
-      } else if (profile.role === 'mentor' || profile.role === 'hod' || profile.role === 'advisor') {
+      } else if (profile.role === 'staff' || profile.role === 'mentor' || profile.role === 'hod' || profile.role === 'advisor') {
         navigate('/staff-dashboard');
       } else if (profile.role === 'principal') {
         navigate('/principal-dashboard');
@@ -60,7 +60,7 @@ export function CreatePassword() {
   const routeByRole = (value: string) => {
     if (value === 'admin') return '/admin';
     if (value === 'principal') return '/principal-dashboard';
-    if (value === 'mentor' || value === 'hod' || value === 'advisor' || value === 'warden') return '/staff-dashboard';
+    if (value === 'staff' || value === 'mentor' || value === 'hod' || value === 'advisor' || value === 'warden') return '/staff-dashboard';
     return '/student-onboarding';
   };
 

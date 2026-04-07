@@ -17,8 +17,10 @@ export function AdminLogin() {
     setLoading(true);
     setErrorMessage('');
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       password,
     });
 
@@ -28,22 +30,31 @@ export function AdminLogin() {
       return;
     }
 
-    const signedInEmail = data.user?.email;
-    if (!signedInEmail) {
-      setErrorMessage('Unable to verify admin account.');
+    const signedInEmail = data.user?.email?.toLowerCase().trim();
+
+    const { data: directoryUser, error: directoryError } = await supabase
+      .from('user_directory')
+      .select('email, role, access_status, status, account_status')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (directoryError) {
+      await supabase.auth.signOut();
+      setErrorMessage('Unable to verify admin access. Please try again.');
       setLoading(false);
       return;
     }
 
-    const { data: directoryUser, error: roleError } = await supabase
-      .from('user_directory')
-      .select('role')
-      .eq('email', signedInEmail)
-      .maybeSingle();
+    const accessState = (directoryUser?.access_status || directoryUser?.status || directoryUser?.account_status || '').toLowerCase().trim();
+    const role = (directoryUser?.role || '').toLowerCase().trim();
+    const allowedAdminEmail = (import.meta.env.VITE_ADMIN_EMAIL || '').toLowerCase().trim();
 
-    if (roleError || directoryUser?.role !== 'admin') {
+    const isAdminAccount = role === 'admin' || (allowedAdminEmail && signedInEmail === allowedAdminEmail);
+    const isApproved = accessState === 'approved' || accessState === 'active' || accessState === '';
+
+    if (!signedInEmail || !directoryUser || !isAdminAccount || !isApproved) {
       await supabase.auth.signOut();
-      setErrorMessage('This account does not have admin access.');
+      setErrorMessage(!directoryUser ? 'Invalid account. Please contact admin.' : 'This account does not have admin access.');
       setLoading(false);
       return;
     }

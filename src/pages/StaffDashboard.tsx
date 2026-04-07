@@ -1,143 +1,207 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { OutingRequest, UserRole } from '@/types';
-import { getRequests, updateRequest, addNotification } from '@/lib/storage';
-import { MapPin, CheckCircle, XCircle, Clock, FileText, ArrowLeft, RotateCcw } from 'lucide-react';
+import { UserRole } from '@/types';
+import { supabase } from '@/lib/supabase';
+import { MapPin, CheckCircle, XCircle, Clock, FileText, ArrowLeft, RotateCcw, AlertCircle } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import ApprovalTimeline from '@/components/ApprovalTimeline';
 
 const StatusBadge = ({ status }: { status: string }) => {
   const classes =
-    status === 'approved' || status === 'reconsidered' ? 'bg-success/20 text-success border-success/30' :
-    status === 'declined' ? 'bg-destructive/20 text-destructive border-destructive/30' :
+    status === 'approved' ? 'bg-success/20 text-success border-success/30' :
+    status === 'rejected' ? 'bg-destructive/20 text-destructive border-destructive/30' :
     'bg-warning/20 text-warning border-warning/30';
-  const label = status === 'reconsidered' ? 'Reconsidered' : status;
-  return <Badge className={`capitalize border ${classes}`}>{label}</Badge>;
+  return <Badge className={`capitalize border ${classes}`}>{status}</Badge>;
 };
 
-const StaffDashboard = () => {
-  const { profile } = useAuth();
-  const navigate = useNavigate();
-  const [requests, setRequests] = useState<OutingRequest[]>([]);
-  const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({});
+interface PassRequest {
+  id: string;
+  student_email: string;
+  student_name: string;
+  mentor_email: string;
+  destination: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  approval_chain: string[];
+  current_approver: string;
+  mentor_status?: string;
+  advisor_status?: string;
+  hod_status?: string;
+  departure_datetime?: string;
+  return_datetime?: string;
+  departure_date?: string;
+  return_date?: string;
+  rejection_reason?: string;
+  type: 'outing' | 'leave';
+}
 
-  const staffRoles: UserRole[] = ['mentor', 'advisor', 'hod'];
+const StaffDashboard = () => {
+  const { user, profile, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+  const [outingRequests, setOutingRequests] = useState<PassRequest[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<PassRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({});
+  const [approving, setApproving] = useState<string | null>(null);
+
+  const staffRoles: UserRole[] = ['staff', 'mentor', 'advisor', 'hod'];
   const currentRole = (profile?.role as UserRole | undefined);
+  const approvalRole = currentRole === 'staff' ? 'mentor' : currentRole;
   const actorName = profile?.full_name || profile?.email || 'Staff';
+  const dashboardRoleLabel = currentRole === 'hod' ? 'HOD' : 'STAFF';
 
   useEffect(() => {
-    if (!currentRole || !staffRoles.includes(currentRole)) { navigate('/'); return; }
-    refreshRequests();
-  }, [currentRole, navigate]);
-
-  if (!currentRole || !staffRoles.includes(currentRole)) return null;
-
-  const refreshRequests = () => {
-    setRequests(getRequests());
-  };
-
-  const pending = requests.filter(r => r.currentApprover === currentRole && r.status === 'pending');
-  const pendingOuting = pending.filter(r => r.type === 'outing');
-  const pendingLeave = pending.filter(r => r.type === 'leave');
-  const history = requests.filter(r => r.approvalChain.some(s => s.role === currentRole && s.status !== 'pending'));
-
-  // Find requests declined by this user that can be reconsidered
-  const declinedByMe = requests.filter(r => {
-    const step = r.approvalChain.find(s => s.role === currentRole);
-    return step && step.status === 'declined' && r.status === 'declined' && r.currentApprover === 'declined';
-  });
-
-  const handleApprove = (id: string) => {
-    updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === currentRole);
-      if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'approved', approvedBy: actorName, timestamp: new Date().toISOString() };
-      const nextStep = r.approvalChain[stepIdx + 1];
-      if (nextStep) {
-        r.currentApprover = nextStep.role;
-      } else {
-        r.currentApprover = 'completed';
-        r.status = 'approved';
-      }
-      return r;
-    });
-    refreshRequests();
-  };
-
-  const handleDecline = (id: string) => {
-    const reason = declineReasons[id] || 'No reason provided';
-    let declinedRequest: OutingRequest | null = null;
-    updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === currentRole);
-      if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = { ...r.approvalChain[stepIdx], status: 'declined', approvedBy: actorName, reason, timestamp: new Date().toISOString() };
-      r.currentApprover = 'declined';
-      r.status = 'declined';
-      declinedRequest = { ...r };
-      return r;
-    });
-
-    if (declinedRequest) {
-      const req = declinedRequest as OutingRequest;
-      const roleName = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
-      addNotification({
-        id: crypto.randomUUID(),
-        requestId: req.id,
-        studentId: req.studentId,
-        method: 'sms',
-        destination: req.studentPhone,
-        message: `Your gatepass request has been rejected by your ${roleName}. Please contact your ${roleName} for further details.`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
+    if (authLoading) return;
+    if (!approvalRole || !staffRoles.includes(currentRole)) { 
+      navigate('/'); 
+      return; 
     }
-    refreshRequests();
+    loadRequests();
+  }, [authLoading, currentRole, approvalRole, navigate, user?.email]);
+
+  if (authLoading) return null;
+  if (!currentRole || !approvalRole || !staffRoles.includes(currentRole)) return null;
+
+  const loadRequests = async () => {
+    if (!user?.email) return;
+    
+    setLoading(true);
+    try {
+      // Load outing requests
+      let outingQuery = supabase
+        .from('outing_requests')
+        .select('*')
+        .eq('current_approver', approvalRole)
+        .order('created_at', { ascending: false });
+
+      if (approvalRole === 'mentor' && user?.email) {
+        outingQuery = outingQuery.eq('mentor_email', user.email);
+      }
+
+      const { data: outings, error: outingErr } = await outingQuery;
+
+      if (outingErr) {
+        console.error('Error loading outing requests:', outingErr);
+      } else {
+        setOutingRequests((outings || []).map(r => ({ ...r, type: 'outing' as const })));
+      }
+
+      // Load leave requests
+      let leaveQuery = supabase
+        .from('leave_requests')
+        .select('*')
+        .eq('current_approver', approvalRole)
+        .order('created_at', { ascending: false });
+
+      if (approvalRole === 'mentor' && user?.email) {
+        leaveQuery = leaveQuery.eq('mentor_email', user.email);
+      }
+
+      const { data: leaves, error: leaveErr } = await leaveQuery;
+
+      if (leaveErr) {
+        console.error('Error loading leave requests:', leaveErr);
+      } else {
+        setLeaveRequests((leaves || []).map(r => ({ ...r, type: 'leave' as const })));
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleReconsider = (id: string) => {
-    updateRequest(id, r => {
-      const stepIdx = r.approvalChain.findIndex(s => s.role === currentRole);
-      if (stepIdx === -1) return r;
-      r.approvalChain[stepIdx] = {
-        ...r.approvalChain[stepIdx],
-        status: 'reconsidered',
-        approvedBy: actorName,
-        reason: undefined,
-        timestamp: new Date().toISOString(),
+  const getPendingRequests = (type: 'outing' | 'leave') => {
+    const requests = type === 'outing' ? outingRequests : leaveRequests;
+    return requests.filter(r => r.status === 'pending' && r.current_approver === approvalRole);
+  };
+
+  const handleApprove = async (id: string, type: 'outing' | 'leave') => {
+    setApproving(id);
+    try {
+      const table = type === 'outing' ? 'outing_requests' : 'leave_requests';
+      const actorRole = approvalRole;
+      const statusField = `${actorRole}_status` as any;
+      
+      // Update the status for this role
+      const updateData: any = {
+        [statusField]: 'approved',
+        approved_by: actorName,
       };
-      // Continue to next approver
-      const nextStep = r.approvalChain[stepIdx + 1];
-      if (nextStep) {
-        r.currentApprover = nextStep.role;
-        r.status = 'pending';
-      } else {
-        r.currentApprover = 'completed';
-        r.status = 'approved';
-      }
-      return r;
-    });
 
-    // Notify student
-    const req = getRequests().find(r => r.id === id);
-    if (req) {
-      const roleName = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
-      addNotification({
-        id: crypto.randomUUID(),
-        requestId: req.id,
-        studentId: req.studentId,
-        method: 'sms',
-        destination: req.studentPhone,
-        message: `Your gatepass request has been reconsidered and approved by your ${roleName}. It is now forwarded to the next authority.`,
-        createdAt: new Date().toISOString(),
-        read: false,
-      });
+      // Determine next approver - currently just 'mentor' in chain
+      // In future, could be ['mentor', 'advisor', 'hod']
+      const nextApprovers: Record<string, string | null> = {
+        'mentor': 'advisor', // After mentor approves, goes to advisor
+        'advisor': 'hod',    // After advisor approves, goes to hod
+        'hod': null,         // After hod approves, done
+      };
+
+      const nextApprover = nextApprovers[actorRole];
+      
+      updateData.current_approver = nextApprover || null;
+      updateData.status = nextApprover ? 'pending' : 'approved';
+
+      const { error } = await supabase
+        .from(table)
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        alert('Failed to approve request: ' + error.message);
+        return;
+      }
+
+      alert('Request approved successfully!');
+      await loadRequests();
+    } finally {
+      setApproving(null);
     }
-    refreshRequests();
+  };
+
+  const handleDecline = async (id: string, type: 'outing' | 'leave') => {
+    const reason = declineReasons[id] || 'No reason provided';
+    
+    if (!reason.trim()) {
+      alert('Please provide a reason for declining');
+      return;
+    }
+
+    setApproving(id);
+    try {
+      const table = type === 'outing' ? 'outing_requests' : 'leave_requests';
+      const actorRole = approvalRole;
+      const statusField = `${actorRole}_status` as any;
+
+      const { error } = await supabase
+        .from(table)
+        .update({
+          [statusField]: 'rejected',
+          rejected_by: actorName,
+          rejection_reason: reason,
+          current_approver: null,
+          status: 'rejected',
+        })
+        .eq('id', id);
+
+      if (error) {
+        alert('Failed to decline request: ' + error.message);
+        return;
+      }
+
+      setDeclineReasons(prev => {
+        const updated = { ...prev };
+        delete updated[id];
+        return updated;
+      });
+
+      alert('Request declined and student has been notified.');
+      await loadRequests();
+    } finally {
+      setApproving(null);
+    }
   };
 
   return (
@@ -149,7 +213,7 @@ const StaffDashboard = () => {
             <span className="font-display font-bold text-lg">PassNTrack</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm opacity-90">{actorName} ({currentRole.toUpperCase()})</span>
+            <span className="text-sm opacity-90">{actorName} ({dashboardRoleLabel})</span>
             <ProfileDropdown />
           </div>
         </div>
@@ -160,151 +224,181 @@ const StaffDashboard = () => {
           <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate('/')}>
             <ArrowLeft className="w-4 h-4" /> Back
           </Button>
-          <h1 className="text-3xl font-display font-bold text-foreground capitalize">{currentRole} Dashboard</h1>
+          <h1 className="text-3xl font-display font-bold text-foreground">{dashboardRoleLabel === 'HOD' ? 'HOD Dashboard' : 'Staff Dashboard'}</h1>
         </div>
 
-        <Tabs defaultValue="outing" className="space-y-6">
-          <TabsList className="flex flex-wrap gap-1">
-            <TabsTrigger value="outing" className="gap-1">
-              <Clock className="w-4 h-4" /> Pending Outing ({pendingOuting.length})
-            </TabsTrigger>
-            <TabsTrigger value="leave" className="gap-1">
-              <Clock className="w-4 h-4" /> Pending Leave ({pendingLeave.length})
-            </TabsTrigger>
-            {declinedByMe.length > 0 && (
-              <TabsTrigger value="declined" className="gap-1">
-                <XCircle className="w-4 h-4" /> Declined ({declinedByMe.length})
+        {loading ? (
+          <div className="card-elevated text-center py-12">
+            <p className="text-muted-foreground">Loading requests...</p>
+          </div>
+        ) : (
+          <Tabs defaultValue="outing" className="space-y-6">
+            <TabsList className="flex flex-wrap gap-1">
+              <TabsTrigger value="outing" className="gap-1">
+                <Clock className="w-4 h-4" /> Pending Outing ({getPendingRequests('outing').length})
               </TabsTrigger>
-            )}
-            <TabsTrigger value="history" className="gap-1">
-              <FileText className="w-4 h-4" /> History
-            </TabsTrigger>
-          </TabsList>
+              <TabsTrigger value="leave" className="gap-1">
+                <Clock className="w-4 h-4" /> Pending Leave ({getPendingRequests('leave').length})
+              </TabsTrigger>
+              <TabsTrigger value="history" className="gap-1">
+                <FileText className="w-4 h-4" /> History
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="outing">
-            {pendingOuting.length === 0 ? (
-              <div className="card-elevated text-center py-12 text-muted-foreground">
-                <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p>No pending outing requests</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pendingOuting.map(r => (
-                  <RequestCard key={r.id} request={r} onApprove={handleApprove} onDecline={handleDecline} declineReason={declineReasons[r.id] || ''} onDeclineReasonChange={v => setDeclineReasons(p => ({ ...p, [r.id]: v }))} />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="leave">
-            {pendingLeave.length === 0 ? (
-              <div className="card-elevated text-center py-12 text-muted-foreground">
-                <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p>No pending leave requests</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pendingLeave.map(r => (
-                  <RequestCard key={r.id} request={r} onApprove={handleApprove} onDecline={handleDecline} declineReason={declineReasons[r.id] || ''} onDeclineReasonChange={v => setDeclineReasons(p => ({ ...p, [r.id]: v }))} />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          {declinedByMe.length > 0 && (
-            <TabsContent value="declined">
-              <div className="space-y-4">
-                {declinedByMe.map(r => (
-                  <div key={r.id} className="card-elevated border-l-4 border-l-destructive">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h3 className="font-semibold text-foreground text-lg">{r.name}</h3>
-                        <p className="text-sm text-muted-foreground">{r.type.toUpperCase()} | {r.year} Year, {r.branch} | {r.institution}</p>
-                      </div>
-                      <StatusBadge status="declined" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-3">
-                      <p><strong>Reg No:</strong> {r.regNumber}</p>
-                      <p><strong>Room:</strong> {r.roomNumber}</p>
-                      <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()}</p>
-                      <p><strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
-                      <p className="col-span-2"><strong>Reason:</strong> {r.reason}</p>
-                    </div>
-                    <ApprovalTimeline chain={r.approvalChain} />
-                    <Button className="mt-3 gap-2 bg-amber-500 hover:bg-amber-600 text-white" onClick={() => handleReconsider(r.id)}>
-                      <RotateCcw className="w-4 h-4" /> Reconsider & Approve
-                    </Button>
-                  </div>
-                ))}
-              </div>
+            <TabsContent value="outing">
+              {getPendingRequests('outing').length === 0 ? (
+                <div className="card-elevated text-center py-12 text-muted-foreground">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p>No pending outing requests</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {getPendingRequests('outing').map(r => (
+                    <RequestCard 
+                      key={r.id} 
+                      request={r} 
+                      onApprove={handleApprove} 
+                      onDecline={handleDecline} 
+                      declineReason={declineReasons[r.id] || ''} 
+                      onDeclineReasonChange={v => setDeclineReasons(p => ({ ...p, [r.id]: v }))}
+                      approving={approving === r.id}
+                    />
+                  ))}
+                </div>
+              )}
             </TabsContent>
-          )}
 
-          <TabsContent value="history">
-            {history.length === 0 ? (
-              <div className="card-elevated text-center py-12 text-muted-foreground">
-                <p>No past approvals</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {history.map(r => (
-                  <div key={r.id} className="card-elevated">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold text-foreground">{r.name} — {r.type} pass</h3>
-                        <p className="text-sm text-muted-foreground">{r.year} Year, {r.branch} | {r.institution}</p>
+            <TabsContent value="leave">
+              {getPendingRequests('leave').length === 0 ? (
+                <div className="card-elevated text-center py-12 text-muted-foreground">
+                  <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p>No pending leave requests</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {getPendingRequests('leave').map(r => (
+                    <RequestCard 
+                      key={r.id} 
+                      request={r} 
+                      onApprove={handleApprove} 
+                      onDecline={handleDecline} 
+                      declineReason={declineReasons[r.id] || ''} 
+                      onDeclineReasonChange={v => setDeclineReasons(p => ({ ...p, [r.id]: v }))}
+                      approving={approving === r.id}
+                    />
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="history">
+              {outingRequests.filter(r => r.status !== 'pending').length === 0 && leaveRequests.filter(r => r.status !== 'pending').length === 0 ? (
+                <div className="card-elevated text-center py-12 text-muted-foreground">
+                  <p>No past approvals</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {[...outingRequests, ...leaveRequests].filter(r => r.status !== 'pending').map(r => (
+                    <div key={r.id} className="card-elevated">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold text-foreground">{r.student_name} — {r.type} pass</h3>
+                          <p className="text-sm text-muted-foreground">{r.student_email}</p>
+                        </div>
+                        <StatusBadge status={r.status} />
                       </div>
-                      <StatusBadge status={r.status} />
+                      <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                        <p><strong>Destination:</strong> {r.destination}</p>
+                        <p><strong>Reason:</strong> {r.reason}</p>
+                        {r.rejection_reason && (
+                          <>
+                            <div className="flex gap-2 items-start mt-3 p-3 bg-red-50 rounded border border-red-200">
+                              <AlertCircle className="w-4 h-4 text-red-600 mt-0.5" />
+                              <div>
+                                <p className="font-semibold text-red-900">Rejection Reason</p>
+                                <p className="text-red-800">{r.rejection_reason}</p>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <ApprovalTimeline chain={r.approvalChain} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
       </main>
     </div>
   );
 };
 
-function RequestCard({ request: r, onApprove, onDecline, declineReason, onDeclineReasonChange }: {
-  request: OutingRequest;
-  onApprove: (id: string) => void;
-  onDecline: (id: string) => void;
+function RequestCard({ 
+  request: r, 
+  onApprove, 
+  onDecline, 
+  declineReason, 
+  onDeclineReasonChange,
+  approving
+}: {
+  request: PassRequest;
+  onApprove: (id: string, type: 'outing' | 'leave') => void;
+  onDecline: (id: string, type: 'outing' | 'leave') => void;
   declineReason: string;
   onDeclineReasonChange: (v: string) => void;
+  approving: boolean;
 }) {
   return (
     <div className="card-elevated">
       <div className="flex justify-between items-start mb-3">
         <div>
-          <h3 className="font-semibold text-foreground text-lg">{r.name}</h3>
-          <p className="text-sm text-muted-foreground">{r.type.toUpperCase()} | {r.year} Year, {r.branch}</p>
+          <h3 className="font-semibold text-foreground text-lg">{r.student_name}</h3>
+          <p className="text-sm text-muted-foreground">{r.type.toUpperCase()} | {r.student_email}</p>
         </div>
         <Badge className="bg-warning/20 text-warning border border-warning/30">Pending Your Approval</Badge>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground mb-4">
-        <p><strong>Institution:</strong> {r.institution}</p>
-        <p><strong>Reg No:</strong> {r.regNumber}</p>
-        <p><strong>Room:</strong> {r.roomNumber}</p>
-        <p><strong>Student Phone:</strong> {r.studentPhone}</p>
-        <p><strong>Parent Phone:</strong> {r.parentPhone}</p>
-        <p><strong>Out:</strong> {new Date(r.outDateTime).toLocaleString()}</p>
-        <p><strong>In:</strong> {new Date(r.inDateTime).toLocaleString()}</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-muted-foreground mb-4">
+        <p><strong>Destination:</strong> {r.destination}</p>
+        <p><strong>Status:</strong> {r.status}</p>
         <p className="col-span-2"><strong>Reason:</strong> {r.reason}</p>
+        {r.type === 'outing' && r.departure_datetime && (
+          <>
+            <p><strong>Departure:</strong> {new Date(r.departure_datetime).toLocaleString()}</p>
+            <p><strong>Return:</strong> {new Date(r.return_datetime || '').toLocaleString()}</p>
+          </>
+        )}
+        {r.type === 'leave' && r.departure_date && (
+          <>
+            <p><strong>From:</strong> {r.departure_date}</p>
+            <p><strong>To:</strong> {r.return_date}</p>
+          </>
+        )}
       </div>
-      {r.approvalChain.some(s => s.status !== 'pending') && (
-        <ApprovalTimeline chain={r.approvalChain} />
-      )}
       <div className="flex items-end gap-3 mt-3">
-        <Button className="gap-1 bg-success hover:bg-success/90 text-success-foreground" onClick={() => onApprove(r.id)}>
+        <Button 
+          className="gap-1 bg-success hover:bg-success/90 text-success-foreground"
+          onClick={() => onApprove(r.id, r.type)}
+          disabled={approving}
+        >
           <CheckCircle className="w-4 h-4" /> Approve
         </Button>
         <div className="flex-1">
-          <Textarea placeholder="Reason for declining..." value={declineReason} onChange={e => onDeclineReasonChange(e.target.value)} rows={1} className="text-sm" />
+          <Textarea 
+            placeholder="Reason for declining..." 
+            value={declineReason} 
+            onChange={e => onDeclineReasonChange(e.target.value)} 
+            rows={1} 
+            className="text-sm"
+            disabled={approving}
+          />
         </div>
-        <Button variant="destructive" className="gap-1" onClick={() => onDecline(r.id)}>
+        <Button 
+          variant="destructive" 
+          className="gap-1" 
+          onClick={() => onDecline(r.id, r.type)}
+          disabled={approving}
+        >
           <XCircle className="w-4 h-4" /> Decline
         </Button>
       </div>

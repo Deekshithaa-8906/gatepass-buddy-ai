@@ -21,35 +21,17 @@ export function VerifyOTP() {
     setMsg('');
     setIsError(false);
 
-    const { data: authData, error: authError } = await supabase.auth.verifyOtp({
-      email,
-      token: otp,
-      type: 'email'
+    const { error: verifyError } = await supabase.functions.invoke('registration-otp', {
+      body: {
+        action: 'verify',
+        email,
+        otp,
+        role,
+      },
     });
 
-    if (authError) {
-      setMsg(authError.message);
-      setIsError(true);
-      setLoading(false);
-      return;
-    }
-
-    // Insert request into directory with full details
-    const { error: dbError } = await supabase.from('user_directory').upsert({
-      email,
-      role,
-      status: 'pending',
-      access_status: 'pending_approval',
-      account_status: 'inactive',
-      full_name: '',
-      mobile_number: '',
-      password_created: false,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }, { onConflict: 'email' });
-
-    if (dbError) {
-      setMsg("DB Error: " + dbError.message);
+    if (verifyError) {
+      setMsg(verifyError.message);
       setIsError(true);
       setLoading(false);
       return;
@@ -78,15 +60,15 @@ export function VerifyOTP() {
       <main className="relative z-10 flex-grow flex items-center justify-center p-6 sm:p-12">
         <div className="max-w-md w-full bg-white/20 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 text-center flex flex-col items-center p-8 sm:p-10">
           <h1 className="font-bold text-gray-900 text-3xl mb-4">Verify Email</h1>
-          <p className="text-gray-800 font-medium mb-8">Enter the code sent to {email}</p>
+          <p className="text-gray-800 font-medium mb-8">Enter the verification code sent to {email}</p>
           <form className="w-full space-y-5" onSubmit={handleVerify}>
             <input
               type="text"
               value={otp}
               onChange={e => setOtp(e.target.value.replace(/[^0-9]/g, ''))}
               className="w-full px-4 py-3 bg-white/50 border border-white/40 rounded-xl outline-none text-gray-900 text-center tracking-[0.5em]"
-              placeholder="00000000"
-              maxLength={8}
+              placeholder="000000"
+              maxLength={6}
               required
             />
             {msg && <p className={`text-sm font-semibold ${isError ? 'text-[#CD0000]' : 'text-green-600'}`}>{msg}</p>}

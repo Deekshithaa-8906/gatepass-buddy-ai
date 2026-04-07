@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 export function CreateAccount() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
-  const [selectedRole, setSelectedRole] = useState<'student' | 'mentor' | 'hod' | 'principal'>('student');
+  const [selectedRole, setSelectedRole] = useState<'student' | 'staff' | 'hod' | 'warden' | 'principal'>('student');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -60,26 +60,26 @@ export function CreateAccount() {
         return;
       }
 
-      // Send OTP via Supabase
-      const { error: signUpError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          shouldCreateUser: true,
+      const { error: otpError } = await supabase.functions.invoke('registration-otp', {
+        body: {
+          action: 'send',
+          email: email.trim().toLowerCase(),
+          role: selectedRole,
         },
       });
 
-      if (signUpError) {
-        setError(signUpError.message || 'Failed to send OTP. Please try again.');
+      if (otpError) {
+        setError(otpError.message || 'Failed to send OTP. Please try again.');
         setLoading(false);
         return;
       }
 
-      setSuccess('OTP sent successfully! Check your email.');
+      setSuccess('Verification code sent successfully! Check your email.');
       setLoading(false);
 
       // Navigate to OTP verification page after a short delay
       setTimeout(() => {
-        navigate('/verify-otp', { state: { email, role: selectedRole } });
+        navigate('/verify-otp', { state: { email: email.trim().toLowerCase(), role: selectedRole } });
       }, 1500);
     } catch (err) {
       setError('An error occurred. Please try again.');
@@ -148,13 +148,14 @@ export function CreateAccount() {
               <div className="relative">
                 <select
                   value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as 'student' | 'mentor' | 'hod' | 'principal')}
+                  onChange={(e) => setSelectedRole(e.target.value as 'student' | 'staff' | 'hod' | 'warden' | 'principal')}
                   disabled={loading}
                   className="w-full px-4 py-3 bg-white/50 border border-white/40 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none appearance-none transition-all text-gray-900 font-medium backdrop-blur-sm cursor-pointer"
                 >
                   <option value="student">Student</option>
-                  <option value="mentor">Teacher</option>
+                  <option value="staff">Staff</option>
                   <option value="hod">HOD</option>
+                  <option value="warden">Warden</option>
                   <option value="principal">Principal</option>
                 </select>
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-600">

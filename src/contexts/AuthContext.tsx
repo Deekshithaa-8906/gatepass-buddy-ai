@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
 export type UserStatus = 'pending' | 'approved' | 'active';
-export type UserRole = 'student' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'admin';
+export type UserRole = 'student' | 'staff' | 'mentor' | 'advisor' | 'hod' | 'warden' | 'principal' | 'admin';
 
 interface Profile {
   id: string;
@@ -26,6 +26,18 @@ interface Profile {
   onboarding_complete?: boolean;
   access_status?: string;
   account_status?: string;
+  mentor?: string;
+  mentor_email?: string;
+  advisor?: string;
+  advisor_email?: string;
+  hod?: string;
+  hod_email?: string;
+  principal?: string;
+  principal_email?: string;
+  mentor_id?: string;
+  advisor_id?: string;
+  hod_id?: string;
+  principal_id?: string;
 }
 
 interface AuthContextType {
@@ -73,15 +85,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchProfile = async (userEmail: string) => {
     try {
       const { data, error } = await supabase
-        .from('user_directory')
-        .select('id, email, full_name, role, status, mobile_number, register_number, class_details, parent_name, parent_mobile, gender, institute, year_of_study, hostel_block, room_number, department, password_created, onboarding_complete, access_status, account_status')
+        .from('user_profile_view')
+        .select('id, email, full_name, role, status, mobile_number, register_number, class_details, parent_name, parent_number, gender, institute, year, hostel_block, room_number, department, password_created, onboarding_complete, access_status, account_status, mentor_id, advisor_id, hod_id, principal_id, mentor_name, mentor_email, advisor_name, advisor_email, hod_name, hod_email, principal_name, principal_email')
         .eq('email', userEmail)
         .maybeSingle();
 
       if (error) {
         console.error('Error fetching profile:', error);
+      } else if (data) {
+        // Map database columns to profile interface, handling legacy field names
+        const mappedProfile: Profile = {
+          ...data,
+          parent_mobile: data.parent_number, // Map new column name to expected interface
+          year_of_study: data.year, // Map new column name to expected interface
+          mentor: data.mentor_name, // Provide legacy field names for backward compatibility
+          advisor: data.advisor_name,
+          hod: data.hod_name,
+          principal: data.principal_name,
+        };
+        setProfile(mappedProfile);
       } else {
-        setProfile((data ?? null) as Profile | null);
+        setProfile(null);
       }
     } catch (err) {
       console.error('Unexpected error fetching profile:', err);

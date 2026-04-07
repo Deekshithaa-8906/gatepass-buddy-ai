@@ -18,18 +18,20 @@ const ComplaintStatusBadge = ({ status }: { status: string }) => {
 };
 
 const PrincipalDashboard = () => {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [notifications, setNotifications] = useState<PrincipalNotification[]>([]);
   const actorName = profile?.full_name || profile?.email || 'Principal';
 
   useEffect(() => {
+    if (authLoading) return;
     if (!profile || profile.role !== 'principal') { navigate('/'); return; }
     checkAndEscalateComplaints();
     refreshData();
-  }, [profile, navigate]);
+  }, [authLoading, profile, navigate]);
 
+  if (authLoading) return null;
   if (!profile || profile.role !== 'principal') return null;
 
   const refreshData = () => {
