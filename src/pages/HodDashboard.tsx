@@ -1,374 +1,1084 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Users, 
-  Map, 
-  FileText, 
-  Activity, 
-  LogOut, 
-  Bell, 
-  CheckCircle, 
-  XCircle, 
-  Clock3, 
-  MapPin, 
-  AlertTriangle,
-  Paperclip,
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Check,
+  CheckCircle,
+  FileText,
+  GraduationCap,
+  Inbox,
+  LogOut,
+  Mail,
+  MapPin,
+  Plane,
   User,
-  Building,
-  Calendar,
-  Clock,
-  ShieldCheck
+  XCircle,
 } from 'lucide-react';
-import bgImage from '../assets/sns-campus-bg.png';
-import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from '@/components/ui/use-toast';
 
-// Mock Data Types
-type LeaveStatus = 'Pending' | 'Approved' | 'Rejected';
+type RequestType = 'leave' | 'outing';
+type RequestStatus = 'pending' | 'approved' | 'rejected';
+type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'reconsidered';
 
-interface RequestData {
+interface RequestSummary {
   id: string;
+  requestType: RequestType;
   studentName: string;
   studentEmail: string;
-  department: string;
-  roomNumber: string;
-  campus: string;
-  type: 'Outing' | 'Leave';
+  reason: string;
   destination: string;
-  reasonTitle: string;
-  reasonDescription: string;
-  departure: string;
-  returnTime: string;
-  duration: string;
-  status: LeaveStatus;
-  isEmergency: boolean;
-  hasAttachment: boolean;
-  approvalFlow: { role: string; status: LeaveStatus; remarks?: string; approverName: string }[];
-  dateSubmitted: string;
+  status: RequestStatus;
+  currentApprover: string | null;
+  approvalChain: string[];
+  createdAt: string;
+  departureDate?: string | null;
+  returnDate?: string | null;
+  departureDateTime?: string | null;
+  returnDateTime?: string | null;
+  mentorStatus?: string | null;
+  advisorStatus?: string | null;
+  hodStatus?: string | null;
+  rejectionReason?: string | null;
 }
 
-const mockRequests: RequestData[] = [
-  {
-    id: "REQ004",
-    studentName: "Priya Sharma",
-    studentEmail: "priya.s@snsct.edu.in",
-    department: "Computer Science",
-    roomNumber: "A-102",
-    campus: "SNS College of Technology",
-    type: "Leave",
-    destination: "Madurai",
-    reasonTitle: "Family Function",
-    reasonDescription: "Attending my sister's wedding. Need 3 days of leave.",
-    departure: "2023-11-20 06:00 AM",
-    returnTime: "2023-11-23 08:00 PM",
-    duration: "3 Days",
-    status: "Pending",
-    isEmergency: false,
-    hasAttachment: true,
-    approvalFlow: [
-      { role: "Mentor", status: "Approved", remarks: "Invitation verified.", approverName: "Dr. Ananya" },
-      { role: "Advisor", status: "Approved", remarks: "Attendance is above 85%, approved.", approverName: "Prof. Karthik" },
-      { role: "HOD", status: "Pending", approverName: "Dr. Suresh (You)" }
-    ],
-    dateSubmitted: "2023-11-15 09:30 AM"
-  },
-  {
-    id: "REQ005",
-    studentName: "Arjun Reddy",
-    studentEmail: "arjun.r@snsct.edu.in",
-    department: "Computer Science",
-    roomNumber: "B-205",
-    campus: "SNS College of Technology",
-    type: "Leave",
-    destination: "Bangalore",
-    reasonTitle: "Hackathon Participation",
-    reasonDescription: "Selected for the final round of the National Hackathon in Christ University.",
-    departure: "2023-11-18 05:00 AM",
-    returnTime: "2023-11-20 10:00 PM",
-    duration: "2 Days",
-    status: "Pending",
-    isEmergency: false,
-    hasAttachment: true,
-    approvalFlow: [
-      { role: "Mentor", status: "Approved", remarks: "Good opportunity, On-Duty (OD) recommended.", approverName: "Dr. Ananya" },
-      { role: "Advisor", status: "Approved", remarks: "Approved for OD.", approverName: "Prof. Karthik" },
-      { role: "HOD", status: "Pending", approverName: "Dr. Suresh (You)" }
-    ],
-    dateSubmitted: "2023-11-16 11:15 AM"
+interface StudentProfileSnapshot {
+  fullName: string;
+  registerNumber?: string | null;
+  department?: string | null;
+  yearOfStudy?: string | null;
+  classDetails?: string | null;
+  hostelBlock?: string | null;
+  roomNumber?: string | null;
+  institute?: string | null;
+}
+
+interface ApprovalEntry {
+  id: string;
+  role: string;
+  status: ApprovalStatus;
+  reason?: string | null;
+  approverName?: string | null;
+  createdAt: string;
+}
+
+interface NotificationRow {
+  id: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+const TIMELINE_STEPS = ['SUBMITTED', 'MENTOR', 'ADVISOR', 'HOD', 'WARDEN'] as const;
+
+const titleCase = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
+
+const normalizeStatus = (status?: string | null): RequestStatus => {
+  if (status === 'approved') return 'approved';
+  if (status === 'rejected' || status === 'declined') return 'rejected';
+  return 'pending';
+};
+
+const normalizeApprovalStatus = (status?: string | null): ApprovalStatus | null => {
+  if (!status) return null;
+  if (status === 'approved' || status === 'rejected' || status === 'pending' || status === 'reconsidered') {
+    return status as ApprovalStatus;
   }
-];
+  if (status === 'declined') return 'rejected';
+  return null;
+};
+
+const formatDate = (value?: string | null) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatTime = (value?: string | null) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+};
+
+const formatDateTimeLabel = (value?: string | null) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const getStatusBadgeClass = (status: RequestStatus) => {
+  switch (status) {
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+    case 'approved':
+      return 'bg-green-100 text-green-700 border-green-200';
+    case 'rejected':
+      return 'bg-red-100 text-red-700 border-red-200';
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-200';
+  }
+};
+
+const getTimelineStage = (currentApprover?: string | null) => {
+  switch ((currentApprover || '').toLowerCase()) {
+    case 'mentor':
+      return 'MENTOR';
+    case 'advisor':
+      return 'ADVISOR';
+    case 'hod':
+      return 'HOD';
+    case 'warden':
+      return 'WARDEN';
+    default:
+      return 'SUBMITTED';
+  }
+};
+
+const buildFallbackHistory = (request: RequestSummary): ApprovalEntry[] => {
+  const entries: ApprovalEntry[] = [];
+  const pushEntry = (role: string, status?: string | null) => {
+    const normalized = normalizeApprovalStatus(status);
+    if (!normalized || normalized === 'pending') return;
+    entries.push({
+      id: `${request.id}-${role}`,
+      role,
+      status: normalized,
+      reason: null,
+      createdAt: request.createdAt,
+    });
+  };
+
+  pushEntry('mentor', request.mentorStatus);
+  pushEntry('advisor', request.advisorStatus);
+
+  if (request.status === 'rejected') {
+    entries.push({
+      id: `${request.id}-hod`,
+      role: 'hod',
+      status: 'rejected',
+      reason: request.rejectionReason,
+      createdAt: request.createdAt,
+    });
+  }
+
+  return entries;
+};
+
+const RequestItem = ({
+  request,
+  student,
+  active,
+  onSelect,
+}: {
+  request: RequestSummary;
+  student?: StudentProfileSnapshot | null;
+  active: boolean;
+  onSelect: () => void;
+}) => (
+  <div
+    onClick={onSelect}
+    className={`p-4 rounded-lg cursor-pointer transition-all border ${
+      active ? 'border-[#CD0000] bg-red-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+    }`}
+  >
+    <div className="mb-3">
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h3 className="font-bold text-gray-900 text-sm">{request.studentName}</h3>
+        <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap ${getStatusBadgeClass(request.status)}`}>
+          {request.status.toUpperCase()}
+        </span>
+      </div>
+      <p className="text-xs text-gray-600 font-medium">
+        {student?.department || '-'} • {student?.yearOfStudy || '-'} Year
+      </p>
+    </div>
+
+    <p className="text-xs font-semibold text-gray-700 mb-1">{titleCase(request.requestType)} Request</p>
+    <p className="text-xs text-gray-600 line-clamp-2 mb-3">{request.reason}</p>
+
+    <div className="flex items-center gap-3 mb-2">
+      <div className="flex items-center gap-1 text-xs text-green-600">
+        <Check className="w-3 h-3" /> Mentor
+      </div>
+      <div className="flex items-center gap-1 text-xs text-green-600">
+        <Check className="w-3 h-3" /> Advisor
+      </div>
+    </div>
+
+    <p className="text-xs text-gray-500">Submitted: {formatDateTimeLabel(request.createdAt)}</p>
+  </div>
+);
+
+const RequestList = ({
+  requests,
+  selectedId,
+  studentDirectory,
+  loading,
+  onSelect,
+}: {
+  requests: RequestSummary[];
+  selectedId: string | null;
+  studentDirectory: Record<string, StudentProfileSnapshot>;
+  loading: boolean;
+  onSelect: (request: RequestSummary) => void;
+}) => (
+  <div className="lg:w-[30%] bg-white rounded-xl shadow-sm border p-6 overflow-y-auto max-h-[calc(100vh-180px)]">
+    <h2 className="text-lg font-bold text-gray-900 mb-4">HOD Approval Queue</h2>
+    {loading ? (
+      <div className="text-sm text-gray-500">Loading requests...</div>
+    ) : requests.length === 0 ? (
+      <div className="text-sm text-gray-500">No requests ready for HOD review.</div>
+    ) : (
+      <div className="space-y-3">
+        {requests.map((request) => (
+          <RequestItem
+            key={`${request.requestType}-${request.id}`}
+            request={request}
+            student={studentDirectory[request.studentEmail]}
+            active={selectedId === request.id}
+            onSelect={() => onSelect(request)}
+          />
+        ))}
+      </div>
+    )}
+  </div>
+);
+
+const ApprovalHistory = ({ history }: { history: ApprovalEntry[] }) => (
+  <div className="space-y-3">
+    {history.map((log) => (
+      <div key={log.id} className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-green-700 font-semibold">
+            <CheckCircle className="w-4 h-4" /> {titleCase(log.role)} Approval
+          </div>
+          <span className="text-xs text-gray-500">{formatDateTimeLabel(log.createdAt)}</span>
+        </div>
+        {log.approverName && <p className="text-xs text-gray-600 mb-1">Name: {log.approverName}</p>}
+        <p className="text-xs text-gray-600">Remark: {log.reason || 'No remarks provided.'}</p>
+      </div>
+    ))}
+  </div>
+);
+
+const Timeline = ({
+  currentStage,
+  rejected,
+  approverNames,
+}: {
+  currentStage: typeof TIMELINE_STEPS[number];
+  rejected: boolean;
+  approverNames: Record<string, string | undefined>;
+}) => (
+  <div className="flex items-center justify-between">
+    {TIMELINE_STEPS.map((stage, index) => {
+      const currentIndex = TIMELINE_STEPS.indexOf(currentStage);
+      const isActive = stage === currentStage;
+      const isComplete = index < currentIndex;
+      const stageClass = rejected && stage === 'HOD'
+        ? 'bg-red-500 text-white'
+        : isActive
+        ? 'bg-[#CD0000] text-white'
+        : isComplete
+        ? 'bg-green-500 text-white'
+        : 'bg-gray-200 text-gray-600';
+
+      return (
+        <React.Fragment key={stage}>
+          <div className="flex flex-col items-center">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${stageClass}`}>
+              {isComplete ? <CheckCircle className="w-5 h-5" /> : <div className="w-3 h-3 bg-white/80 rounded-full" />}
+            </div>
+            <span className="text-xs font-semibold text-gray-700 mt-2">{stage}</span>
+            {approverNames[stage] && (
+              <span className="text-[10px] text-gray-500 mt-1">{approverNames[stage]}</span>
+            )}
+          </div>
+          {index < TIMELINE_STEPS.length - 1 && (
+            <div className={`flex-1 h-1 mx-2 ${index < currentIndex ? 'bg-green-500' : 'bg-gray-200'}`} />
+          )}
+        </React.Fragment>
+      );
+    })}
+  </div>
+);
+
+const ActionSection = ({
+  status,
+  remarks,
+  onRemarksChange,
+  onApprove,
+  onReject,
+  onReconsider,
+  actionLoading,
+}: {
+  status: RequestStatus;
+  remarks: string;
+  onRemarksChange: (value: string) => void;
+  onApprove: () => void;
+  onReject: () => void;
+  onReconsider: () => void;
+  actionLoading: boolean;
+}) => {
+  if (status === 'rejected') {
+    return (
+      <button
+        onClick={onReconsider}
+        className="w-full px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
+        disabled={actionLoading}
+      >
+        {actionLoading ? 'Updating...' : 'Review & Approve'}
+      </button>
+    );
+  }
+
+  if (status === 'approved') {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+        <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
+        <p className="text-sm font-bold text-green-800">Request Approved & Forwarded to Warden</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">HOD Decision</h3>
+      <textarea
+        value={remarks}
+        onChange={(e) => onRemarksChange(e.target.value)}
+        placeholder="Enter your remarks here (optional for approval, required for rejection)..."
+        rows={4}
+        className="w-full p-4 border border-gray-300 rounded-lg outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 text-sm resize-none"
+      />
+      <div className="flex gap-4 mt-4">
+        <button
+          onClick={onReject}
+          className="flex-1 px-6 py-3 bg-white text-[#CD0000] border-2 border-[#CD0000] rounded-lg font-bold transition-all hover:bg-red-50 active:scale-95"
+          disabled={actionLoading}
+        >
+          {actionLoading ? 'Saving...' : 'Reject'}
+        </button>
+        <button
+          onClick={onApprove}
+          className="flex-1 px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
+          disabled={actionLoading}
+        >
+          {actionLoading ? 'Saving...' : 'Approve & Forward to Warden'}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function HodDashboard() {
   const navigate = useNavigate();
+  const { profile, loading: authLoading, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState('requests');
-  const [selectedRequest, setSelectedRequest] = useState<RequestData | null>(mockRequests[0]);
+  const [requests, setRequests] = useState<RequestSummary[]>([]);
+  const [selectedRequestSummary, setSelectedRequestSummary] = useState<RequestSummary | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<RequestSummary | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<StudentProfileSnapshot | null>(null);
+  const [studentDirectory, setStudentDirectory] = useState<Record<string, StudentProfileSnapshot>>({});
+  const [approvalHistory, setApprovalHistory] = useState<ApprovalEntry[]>([]);
   const [remarks, setRemarks] = useState('');
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
 
-  const handleLogout = () => {
+  const displayName = profile?.full_name || profile?.email || 'HOD';
+
+  const loadAssignedStudents = useCallback(async () => {
+    if (!profile) return { data: [], error: null } as { data: any[]; error: any };
+    const selectQuery = (column: string, value: string) =>
+      supabase
+        .from('user_profile_view')
+        .select('*')
+        .eq('role', 'student')
+        .eq(column, value)
+        .order('full_name', { ascending: true });
+
+    const idResponse = profile.id ? await selectQuery('hod_id', profile.id) : { data: [], error: null };
+    if (!idResponse.error || idResponse.error.code !== '42703') {
+      return idResponse;
+    }
+
+    if (profile.email) {
+      return selectQuery('hod_email', profile.email);
+    }
+
+    return { data: [], error: null } as { data: any[]; error: any };
+  }, [profile]);
+
+  const buildRequestSummary = useCallback((row: any, requestType: RequestType): RequestSummary => {
+    return {
+      id: row.id,
+      requestType,
+      studentName: row.student_name,
+      studentEmail: row.student_email,
+      reason: row.reason,
+      destination: row.destination,
+      status: normalizeStatus(row.status),
+      currentApprover: row.current_approver ?? null,
+      approvalChain: row.approval_chain || [],
+      createdAt: row.created_at,
+      departureDate: row.departure_date ?? null,
+      returnDate: row.return_date ?? null,
+      departureDateTime: row.departure_datetime ?? null,
+      returnDateTime: row.return_datetime ?? null,
+      mentorStatus: row.mentor_status ?? null,
+      advisorStatus: row.advisor_status ?? null,
+      hodStatus: row.hod_status ?? null,
+      rejectionReason: row.rejection_reason ?? null,
+    };
+  }, []);
+
+  const loadRequests = useCallback(async () => {
+    if (!profile || profile.role !== 'hod') return;
+    setLoadingRequests(true);
+
+    try {
+      const studentResponse = await loadAssignedStudents();
+      if (studentResponse.error) {
+        console.error('Unable to load students:', studentResponse.error);
+      }
+
+      const students = (studentResponse.data || []) as any[];
+      const studentEmailList = students.map((row) => row.email).filter(Boolean);
+
+      const map: Record<string, StudentProfileSnapshot> = {};
+      students.forEach((row) => {
+        if (!row.email) return;
+        map[row.email] = {
+          fullName: row.full_name || row.email,
+          registerNumber: row.register_number,
+          department: row.department,
+          yearOfStudy: row.year_of_study || row.year,
+          classDetails: row.class_details,
+          hostelBlock: row.hostel_block,
+          roomNumber: row.room_number,
+          institute: row.institute,
+        };
+      });
+      setStudentDirectory(map);
+
+      const baseSelect =
+        'id, student_email, student_name, destination, reason, status, current_approver, approval_chain, created_at, departure_date, return_date, departure_datetime, return_datetime, mentor_status, advisor_status, hod_status, rejection_reason';
+
+      const fetchRequests = async (includeApprovalFilters: boolean) => {
+        const applyFilters = (query: any) => {
+          let nextQuery = query.eq('current_approver', 'hod').in('status', ['pending', 'rejected']);
+          if (includeApprovalFilters) {
+            nextQuery = nextQuery.eq('mentor_status', 'approved').eq('advisor_status', 'approved');
+          }
+          if (studentEmailList.length > 0) {
+            nextQuery = nextQuery.in('student_email', studentEmailList);
+          } else {
+            nextQuery = nextQuery.eq('student_email', '__no_assigned_students__');
+          }
+          return nextQuery;
+        };
+
+        const [leaveResponse, outingResponse] = await Promise.all([
+          applyFilters(supabase.from('leave_requests').select(baseSelect)),
+          applyFilters(supabase.from('outing_requests').select(baseSelect)),
+        ]);
+
+        if (leaveResponse.error || outingResponse.error) {
+          const error = leaveResponse.error || outingResponse.error;
+          if (includeApprovalFilters && error?.code === '42703') {
+            return fetchRequests(false);
+          }
+          throw error;
+        }
+
+        const leaveRows = (leaveResponse.data || []).map((row) => buildRequestSummary(row, 'leave'));
+        const outingRows = (outingResponse.data || []).map((row) => buildRequestSummary(row, 'outing'));
+        return [...leaveRows, ...outingRows].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+      };
+
+      const combined = await fetchRequests(true);
+      setRequests(combined);
+    } catch (error: any) {
+      console.error('Failed to load HOD requests:', error);
+      toast({
+        title: 'Unable to load requests',
+        description: error?.message || 'Please check your connection and try again.',
+      });
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, [buildRequestSummary, loadAssignedStudents, profile]);
+
+  const loadApprovalHistory = useCallback(async (request: RequestSummary) => {
+    const { data, error } = await supabase
+      .from('pass_request_approvals')
+      .select('id, approver_role, status, reason, approver_name, created_at')
+      .eq('request_id', request.id)
+      .eq('request_type', request.requestType)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Unable to load approval history:', error);
+      return [] as ApprovalEntry[];
+    }
+
+    return (data || []).map((entry) => ({
+      id: entry.id,
+      role: entry.approver_role,
+      status: entry.status,
+      reason: entry.reason,
+      approverName: entry.approver_name,
+      createdAt: entry.created_at,
+    }));
+  }, []);
+
+  const loadStudentProfile = useCallback(async (request: RequestSummary) => {
+    const { data, error } = await supabase
+      .from('user_profile_view')
+      .select('*')
+      .eq('email', request.studentEmail)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Unable to load student details:', error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    return {
+      fullName: data.full_name || request.studentName,
+      registerNumber: data.register_number,
+      department: data.department,
+      yearOfStudy: data.year_of_study || data.year,
+      classDetails: data.class_details,
+      hostelBlock: data.hostel_block,
+      roomNumber: data.room_number,
+      institute: data.institute,
+    } satisfies StudentProfileSnapshot;
+  }, []);
+
+  const loadRequestDetails = useCallback(async (summary: RequestSummary) => {
+    const baseSelect =
+      'id, student_email, student_name, destination, reason, status, current_approver, approval_chain, created_at, departure_date, return_date, departure_datetime, return_datetime, mentor_status, advisor_status, hod_status, rejection_reason';
+    const table = summary.requestType === 'leave' ? 'leave_requests' : 'outing_requests';
+    const { data, error } = await supabase.from(table).select(baseSelect).eq('id', summary.id).maybeSingle();
+
+    if (error || !data) {
+      console.error('Unable to load request details:', error);
+      return;
+    }
+
+    const details = buildRequestSummary(data, summary.requestType);
+    setSelectedRequest(details);
+    setRemarks('');
+
+    const [studentProfile, history] = await Promise.all([
+      loadStudentProfile(details),
+      loadApprovalHistory(details),
+    ]);
+
+    setSelectedStudent(studentProfile);
+    setApprovalHistory(history.length > 0 ? history : buildFallbackHistory(details));
+  }, [buildRequestSummary, loadApprovalHistory, loadStudentProfile]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!profile?.id) return;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, title, message, is_read, created_at')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('Unable to load notifications:', error);
+      return;
+    }
+    setNotifications((data || []) as NotificationRow[]);
+  }, [profile?.id]);
+
+  const insertApprovalHistory = useCallback(
+    async (request: RequestSummary, status: ApprovalStatus, reason?: string) => {
+      if (!profile) return;
+      const { error } = await supabase.from('pass_request_approvals').insert({
+        request_id: request.id,
+        request_type: request.requestType,
+        approver_id: profile.id,
+        approver_email: profile.email,
+        approver_name: profile.full_name,
+        approver_role: 'hod',
+        status,
+        reason: reason || null,
+      });
+
+      if (error) {
+        console.error('Unable to log approval history:', error);
+      }
+    },
+    [profile],
+  );
+
+  const handleApprove = useCallback(async () => {
+    if (!selectedRequest || !profile) return;
+    setActionLoading(true);
+
+    const table = selectedRequest.requestType === 'leave' ? 'leave_requests' : 'outing_requests';
+    const updates: Record<string, any> = {
+      status: 'pending',
+      current_approver: 'warden',
+      hod_status: 'approved',
+      approved_by: profile.email,
+      rejection_reason: null,
+      rejected_by: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from(table).update(updates).eq('id', selectedRequest.id);
+    if (error) {
+      console.error('Unable to approve request:', error);
+      toast({ title: 'Approval failed', description: error.message || 'Please try again.' });
+      setActionLoading(false);
+      return;
+    }
+
+    await insertApprovalHistory(selectedRequest, 'approved', remarks.trim() || undefined);
+    toast({ title: 'Request approved', description: 'Forwarded to warden successfully.' });
+    setRemarks('');
+    await loadRequests();
+    await loadRequestDetails(selectedRequest);
+    setActionLoading(false);
+  }, [insertApprovalHistory, loadRequestDetails, loadRequests, profile, remarks, selectedRequest]);
+
+  const handleReject = useCallback(async () => {
+    if (!selectedRequest || !profile) return;
+    if (!remarks.trim()) {
+      toast({ title: 'Remarks required', description: 'Please add remarks before rejecting.' });
+      return;
+    }
+
+    setActionLoading(true);
+    const table = selectedRequest.requestType === 'leave' ? 'leave_requests' : 'outing_requests';
+    const updates: Record<string, any> = {
+      status: 'rejected',
+      current_approver: 'hod',
+      hod_status: 'rejected',
+      rejection_reason: remarks.trim(),
+      rejected_by: profile.email,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from(table).update(updates).eq('id', selectedRequest.id);
+    if (error) {
+      console.error('Unable to reject request:', error);
+      toast({ title: 'Rejection failed', description: error.message || 'Please try again.' });
+      setActionLoading(false);
+      return;
+    }
+
+    await insertApprovalHistory(selectedRequest, 'rejected', remarks.trim());
+    toast({ title: 'Request rejected', description: 'Rejection recorded successfully.' });
+    setRemarks('');
+    await loadRequests();
+    await loadRequestDetails(selectedRequest);
+    setActionLoading(false);
+  }, [insertApprovalHistory, loadRequestDetails, loadRequests, profile, remarks, selectedRequest]);
+
+  const handleReconsider = useCallback(async () => {
+    if (!selectedRequest || !profile) return;
+    setActionLoading(true);
+    const table = selectedRequest.requestType === 'leave' ? 'leave_requests' : 'outing_requests';
+    const updates: Record<string, any> = {
+      status: 'pending',
+      current_approver: 'hod',
+      hod_status: 'pending',
+      rejection_reason: null,
+      rejected_by: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from(table).update(updates).eq('id', selectedRequest.id);
+    if (error) {
+      console.error('Unable to reopen request:', error);
+      toast({ title: 'Unable to reopen', description: error.message || 'Please try again.' });
+      setActionLoading(false);
+      return;
+    }
+
+    await insertApprovalHistory(selectedRequest, 'reconsidered', 'Reopened for review');
+    toast({ title: 'Request reopened', description: 'You can now approve or reject.' });
+    await loadRequests();
+    await loadRequestDetails(selectedRequest);
+    setActionLoading(false);
+  }, [insertApprovalHistory, loadRequestDetails, loadRequests, profile, selectedRequest]);
+
+  const handleLogout = useCallback(async () => {
+    await signOut();
     navigate('/');
+  }, [navigate, signOut]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!profile || profile.role !== 'hod') {
+      navigate('/');
+      return;
+    }
+    void loadRequests();
+  }, [authLoading, loadRequests, navigate, profile]);
+
+  useEffect(() => {
+    if (requests.length === 0) {
+      setSelectedRequestSummary(null);
+      return;
+    }
+    if (!selectedRequestSummary || !requests.some((request) => request.id === selectedRequestSummary.id)) {
+      setSelectedRequestSummary(requests[0]);
+    }
+  }, [requests, selectedRequestSummary]);
+
+  useEffect(() => {
+    if (!selectedRequestSummary) {
+      setSelectedRequest(null);
+      setSelectedStudent(null);
+      setApprovalHistory([]);
+      return;
+    }
+    void loadRequestDetails(selectedRequestSummary);
+  }, [loadRequestDetails, selectedRequestSummary]);
+
+  useEffect(() => {
+    if (activeTab === 'inbox') {
+      void loadNotifications();
+    }
+  }, [activeTab, loadNotifications]);
+
+  const unreadNotifications = useMemo(
+    () => notifications.filter((notification) => !notification.is_read).length,
+    [notifications],
+  );
+
+  if (authLoading) return null;
+
+  const studentMeta = selectedStudent || (selectedRequest ? studentDirectory[selectedRequest.studentEmail] : null);
+  const history = approvalHistory.filter((entry) => ['mentor', 'advisor'].includes(entry.role));
+  const currentStage = getTimelineStage(selectedRequest?.currentApprover);
+  const approverNames: Record<string, string | undefined> = {
+    SUBMITTED: selectedRequest?.studentName,
+    MENTOR: approvalHistory.find((entry) => entry.role === 'mentor')?.approverName,
+    ADVISOR: approvalHistory.find((entry) => entry.role === 'advisor')?.approverName,
+    HOD: profile?.full_name || profile?.email,
   };
 
-  const getStatusBadge = (status: LeaveStatus) => {
-    switch (status) {
-      case 'Approved':
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'requests':
         return (
-          <div className="flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-200 text-xs font-bold w-max">
-            <CheckCircle className="w-3 h-3" /> Approved
+          <div className="flex flex-col lg:flex-row gap-6 h-full">
+            <RequestList
+              requests={requests}
+              selectedId={selectedRequestSummary?.id || null}
+              studentDirectory={studentDirectory}
+              loading={loadingRequests}
+              onSelect={setSelectedRequestSummary}
+            />
+            <div className="lg:w-[70%] bg-white rounded-xl shadow-sm border p-8 overflow-y-auto max-h-[calc(100vh-180px)]">
+              {selectedRequest ? (
+                <div className="space-y-6">
+                  <div className="flex items-start justify-between pb-4 border-b">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-1">{titleCase(selectedRequest.requestType)} Request</h2>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span className="font-semibold">Ref ID: {selectedRequest.id}</span>
+                        <span>•</span>
+                        <span>Applied {formatDateTimeLabel(selectedRequest.createdAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-lg p-5">
+                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Student Information</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="text-xs text-gray-500 font-semibold block mb-1">Name</label>
+                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.fullName || selectedRequest.studentName}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-semibold block mb-1">Department</label>
+                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.department || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-semibold block mb-1">Year & Section</label>
+                        <p className="text-sm text-gray-900 font-semibold">
+                          {studentMeta?.yearOfStudy || '-'} Year {studentMeta?.classDetails ? `- ${studentMeta.classDetails}` : ''}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-semibold block mb-1">Room/Block</label>
+                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.roomNumber || '-'} / {studentMeta?.hostelBlock || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-semibold block mb-1">Campus</label>
+                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.institute || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-semibold block mb-1">Register No</label>
+                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.registerNumber || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">{titleCase(selectedRequest.requestType)} Details</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Plane className="w-4 h-4 text-gray-600" />
+                          <label className="text-xs text-gray-600 font-semibold">Departure</label>
+                        </div>
+                        <p className="text-sm text-gray-900 font-bold">
+                          {selectedRequest.requestType === 'leave' ? formatDate(selectedRequest.departureDate) : formatDate(selectedRequest.departureDateTime)}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {selectedRequest.requestType === 'leave' ? '-' : formatTime(selectedRequest.departureDateTime)}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Plane className="w-4 h-4 text-gray-600 transform rotate-180" />
+                          <label className="text-xs text-gray-600 font-semibold">Return</label>
+                        </div>
+                        <p className="text-sm text-gray-900 font-bold">
+                          {selectedRequest.requestType === 'leave' ? formatDate(selectedRequest.returnDate) : formatDate(selectedRequest.returnDateTime)}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {selectedRequest.requestType === 'leave' ? '-' : formatTime(selectedRequest.returnDateTime)}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <MapPin className="w-4 h-4 text-gray-600" />
+                          <label className="text-xs text-gray-600 font-semibold">Destination</label>
+                        </div>
+                        <p className="text-sm text-gray-900 font-bold">{selectedRequest.destination}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Reason</h3>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <p className="text-sm text-gray-800 leading-relaxed">{selectedRequest.reason}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Approval History</h3>
+                    {history.length === 0 ? <p className="text-sm text-gray-500">No history yet.</p> : <ApprovalHistory history={history} />}
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Approval Timeline</h3>
+                    <Timeline currentStage={currentStage} rejected={selectedRequest.status === 'rejected'} approverNames={approverNames} />
+                  </div>
+
+                  {selectedRequest.status === 'rejected' && selectedRequest.rejectionReason && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <XCircle className="w-5 h-5 text-red-600" />
+                        <h3 className="text-sm font-bold text-red-800">Rejected by HOD</h3>
+                      </div>
+                      <p className="text-sm text-red-700"><span className="font-semibold">Reason:</span> {selectedRequest.rejectionReason}</p>
+                    </div>
+                  )}
+
+                  <ActionSection
+                    status={selectedRequest.status}
+                    remarks={remarks}
+                    onRemarksChange={setRemarks}
+                    onApprove={handleApprove}
+                    onReject={handleReject}
+                    onReconsider={handleReconsider}
+                    actionLoading={actionLoading}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <p className="text-lg font-semibold">Select a request to view details</p>
+                </div>
+              )}
+            </div>
           </div>
         );
-      case 'Rejected':
+
+      case 'inbox':
         return (
-          <div className="flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-md border border-red-200 text-xs font-bold w-max">
-            <XCircle className="w-3 h-3" /> Rejected
+          <div className="bg-white rounded-xl shadow-sm border p-8">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
+                <Inbox className="w-6 h-6 text-[#CD0000]" />
+                Inbox
+              </h2>
+              <p className="text-gray-600 mt-1">Notifications and updates regarding requests.</p>
+            </div>
+            {notifications.length === 0 ? (
+              <div className="text-sm text-gray-500">No notifications yet.</div>
+            ) : (
+              <div className="space-y-4">
+                {notifications.map((notif) => (
+                  <div key={notif.id} className={`rounded-lg p-5 border ${notif.is_read ? 'border-gray-200 bg-white' : 'border-[#CD0000] bg-red-50'} shadow-sm hover:shadow-md transition-all flex gap-4`}>
+                    <div className={`mt-1 rounded-full p-2 h-max ${notif.is_read ? 'bg-gray-100 text-gray-500' : 'bg-[#CD0000]/10 text-[#CD0000]'}`}>
+                      <Mail className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between items-start mb-1">
+                        <h4 className={`font-bold ${notif.is_read ? 'text-gray-800' : 'text-gray-900'} text-base`}>{notif.title}</h4>
+                        <span className="text-xs font-semibold text-gray-500 whitespace-nowrap ml-2">{formatDateTimeLabel(notif.created_at)}</span>
+                      </div>
+                      <p className={`text-sm ${notif.is_read ? 'text-gray-600' : 'text-gray-800 font-medium'}`}>{notif.message}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
+
+      case 'profile':
+        return (
+          <div className="bg-white rounded-xl shadow-sm border p-8">
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
+                <User className="w-6 h-6 text-[#CD0000]" />
+                My Profile
+              </h2>
+              <p className="text-gray-600 mt-1">View and manage your profile information.</p>
+            </div>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <span className="text-xs text-gray-500 font-bold uppercase block mb-1">Full Name</span>
+                  <span className="font-semibold text-gray-900">{profile?.full_name || '-'}</span>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <span className="text-xs text-gray-500 font-bold uppercase block mb-1">Role</span>
+                  <span className="font-semibold text-gray-900">Head of Department (HOD)</span>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <span className="text-xs text-gray-500 font-bold uppercase block mb-1">Department</span>
+                  <span className="font-semibold text-gray-900">{profile?.department || '-'}</span>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <span className="text-xs text-gray-500 font-bold uppercase block mb-1">Employee ID</span>
+                  <span className="font-semibold text-gray-900">{profile?.id ? profile.id.slice(0, 8) : '-'}</span>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <span className="text-xs text-gray-500 font-bold uppercase block mb-1">Email</span>
+                  <span className="font-semibold text-gray-900">{profile?.email || '-'}</span>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <span className="text-xs text-gray-500 font-bold uppercase block mb-1">Mobile</span>
+                  <span className="font-semibold text-gray-900">{profile?.mobile_number || '-'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
       default:
-        return (
-          <div className="flex items-center gap-1 text-orange-500 bg-orange-50 px-2 py-1 rounded-md border border-orange-200 text-xs font-bold w-max">
-            <Clock3 className="w-3 h-3" /> Pending
-          </div>
-        );
+        return null;
     }
   };
 
   return (
-    <div className="min-h-screen relative flex flex-col md:flex-row font-sans overflow-hidden bg-gray-50">
-      {/* Background Image Setup */}
-      <div
-        className="fixed inset-0 bg-cover bg-center z-0 transition-transform duration-1000 scale-100"
-        style={{ backgroundImage: `url(${bgImage})` }}
-      />
-      {/* Subtle Color Overlay */}
-      <div className="fixed inset-0 bg-gradient-to-br from-white/70 via-white/50 to-black/20 z-0" />
-
-      {/* Sidebar - Matching Student Dashboard Design */}
-      <aside className="relative z-20 w-full md:w-72 bg-white/70 backdrop-blur-xl border-r border-white/50 flex flex-col shadow-xl md:h-screen sticky top-0">
-        <div className="p-6 border-b border-white/50 flex items-center gap-3">
-          <div className="bg-[#CD0000] p-2 rounded-xl shadow-sm">
-            <ShieldCheck className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
+      <aside className="w-full md:w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm md:h-screen sticky top-0">
+        <div className="p-6 border-b border-gray-200 flex items-center gap-3">
+          <div className="bg-[#CD0000] p-2 rounded-lg shadow-sm">
+            <GraduationCap className="w-6 h-6 text-white" />
           </div>
-          <span className="text-2xl font-bold tracking-tight text-gray-900 drop-shadow-sm">
+          <span className="text-2xl font-bold tracking-tight text-gray-900">
             PassN<span className="text-[#CD0000]">Track</span>
           </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 flex md:flex-col overflow-x-auto md:overflow-x-visible hide-scrollbar">
-          <button onClick={() => setActiveTab('requests')} className={`flex items-center gap-3 w-full px-4 py-3.5 rounded-xl font-bold transition-all whitespace-nowrap ${activeTab === 'requests' ? 'bg-[#CD0000] text-white shadow-md' : 'text-gray-700 hover:bg-white/60 hover:text-[#CD0000]'}`}>
-            <Activity className="w-5 h-5" /> Pending Actions
-            <span className="ml-auto bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">{mockRequests.filter(r => r.status === 'Pending').length}</span>
+        <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2">
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'requests' ? 'bg-[#CD0000] text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            <FileText className="w-5 h-5" /> Requests
           </button>
-          <button onClick={() => setActiveTab('history')} className={`flex items-center gap-3 w-full px-4 py-3.5 rounded-xl font-bold transition-all whitespace-nowrap ${activeTab === 'history' ? 'bg-[#CD0000] text-white shadow-md' : 'text-gray-700 hover:bg-white/60 hover:text-[#CD0000]'}`}>
-            <FileText className="w-5 h-5" /> Department Log
+          <button
+            onClick={() => setActiveTab('inbox')}
+            className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'inbox' ? 'bg-[#CD0000] text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            <Inbox className="w-5 h-5" /> Inbox
+            {unreadNotifications > 0 && (
+              <span className="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                {unreadNotifications}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg font-semibold transition-all ${
+              activeTab === 'profile' ? 'bg-[#CD0000] text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            <User className="w-5 h-5" /> Profile
           </button>
         </div>
 
-        <div className="p-4 border-t border-white/50 mt-auto">
-          <button onClick={handleLogout} className="flex items-center justify-center gap-2 w-full px-4 py-3 text-gray-700 hover:text-[#CD0000] hover:bg-red-50 font-bold rounded-xl transition-all">
+        <div className="p-4 border-t border-gray-200">
+          <button
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 text-gray-700 hover:text-[#CD0000] hover:bg-red-50 font-semibold rounded-lg transition-all"
+          >
             <LogOut className="w-5 h-5" /> Logout
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="relative z-10 flex-1 h-screen flex flex-col overflow-hidden">
-        {/* Top Navbar */}
-        <header className="px-8 py-5 flex justify-between items-center bg-white/40 backdrop-blur-md border-b border-white/40 sticky top-0 z-20 shrink-0">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">HOD Dashboard</h1>
-            <p className="text-sm font-medium text-gray-600">Department Oversight</p>
-          </div>
+      <main className="flex-1 h-screen overflow-y-auto">
+        <header className="px-8 py-5 flex justify-between items-center bg-white border-b border-gray-200 sticky top-0 z-10">
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight capitalize">
+            {activeTab === 'requests' ? 'HOD Approval Requests' : activeTab}
+          </h1>
           <div className="flex items-center gap-4">
-            <button className="relative p-2 rounded-full hover:bg-white/50 transition-colors text-gray-700">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+            <button
+              onClick={() => setActiveTab('inbox')}
+              className="relative p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700"
+            >
+              <Mail className="w-5 h-5" />
+              {unreadNotifications > 0 && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+              )}
             </button>
-            <div className="flex items-center gap-3 bg-white/60 px-4 py-2 rounded-full shadow-sm border border-white/50 cursor-pointer hover:bg-white/80 transition-colors">
-              <div className="w-8 h-8 rounded-full bg-[#CD0000] flex items-center justify-center text-white font-bold">
-                S
+            <div
+              className="flex items-center gap-3 bg-gray-100 px-4 py-2 rounded-full cursor-pointer hover:bg-gray-200 transition-colors"
+              onClick={() => setActiveTab('profile')}
+            >
+              <div className="w-8 h-8 rounded-full bg-[#CD0000] flex items-center justify-center text-white font-bold text-sm">
+                {displayName.charAt(0).toUpperCase()}
               </div>
               <div className="hidden md:block text-sm">
-                <p className="font-bold text-gray-900 leading-tight">Dr. Suresh</p>
-                <p className="text-gray-600 font-medium text-xs leading-tight">Head of Department (CSE)</p>
+                <p className="font-bold text-gray-900 leading-tight">{displayName}</p>
+                <p className="text-gray-600 text-xs leading-tight">HOD</p>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Dynamic Inner Layout Container */}
-        <div className="flex-1 overflow-hidden">
-          <div className="h-full flex flex-col lg:flex-row gap-6 p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
-            
-            {/* Left Panel - Scrollable List */}
-            <div className="w-full lg:w-1/3 flex flex-col gap-4 overflow-y-auto hide-scrollbar h-full pr-2">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Needs Your Approval</h2>
-              {mockRequests.map((req) => (
-                <div 
-                  key={req.id} 
-                  onClick={() => setSelectedRequest(req)}
-                  className={`bg-white/60 backdrop-blur-md rounded-2xl p-5 border cursor-pointer transition-all shadow-sm flex flex-col gap-3 group
-                    ${selectedRequest?.id === req.id 
-                      ? 'border-[#CD0000] ring-1 ring-[#CD0000]/20 shadow-md' 
-                      : 'border-white/60 hover:shadow-md hover:bg-white/80'}`
-                  }
-                >
-                  <div className="flex flex-col gap-2">
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold text-gray-900 text-lg group-hover:text-[#CD0000] transition-colors">{req.studentName}</span>
-                      {getStatusBadge(req.status)}
-                    </div>
-                    <div className="flex flex-col gap-1 text-sm text-gray-600 font-medium">
-                      <span>{req.department}</span>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-gray-200 text-gray-700">
-                          {req.type} Pass
-                        </span>
-                        <div className="flex gap-2">
-                          {req.hasAttachment && <Paperclip className="w-4 h-4 text-blue-500" />}
-                          {req.isEmergency && <AlertTriangle className="w-4 h-4 text-red-500" />}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Right Panel - Request Details Form */}
-            <div className="w-full lg:w-2/3 h-full overflow-y-auto hide-scrollbar pb-6 rounded-3xl">
-              {selectedRequest ? (
-                <div className="bg-white/40 backdrop-blur-2xl rounded-3xl shadow-xl border border-white/60 p-6 sm:p-8 transition-all">
-                  <div className="flex justify-between items-start mb-6 pb-6 border-b border-white/40">
-                    <div>
-                      <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-                        {selectedRequest.type === 'Outing' ? <Map className="w-6 h-6 text-[#CD0000]" /> : <FileText className="w-6 h-6 text-[#CD0000]" />}
-                        HOD Review Actions
-                      </h2>
-                      <p className="text-sm font-semibold text-gray-500 mt-1">ID: {selectedRequest.id} &bull; Submitted on {selectedRequest.dateSubmitted}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="hidden sm:block">
-                        {getStatusBadge(selectedRequest.status)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section 1: Student info and leave info side-by-side on large screens */}
-                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">Student Information</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/50 p-3 rounded-xl border border-white/60 col-span-2">
-                          <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Name & Department</span>
-                          <span className="font-bold text-gray-900">{selectedRequest.studentName} ({selectedRequest.department})</span>
-                        </div>
-                        <div className="bg-white/50 p-3 rounded-xl border border-white/60 flex items-center gap-2">
-                          <Building className="w-4 h-4 text-gray-400" />
-                          <div>
-                            <span className="text-[10px] text-gray-500 font-bold uppercase block mb-0.5">Room</span>
-                            <span className="font-bold text-gray-900">{selectedRequest.roomNumber}</span>
-                          </div>
-                        </div>
-                        <div className="bg-white/50 p-3 rounded-xl border border-white/60">
-                          <span className="text-[10px] text-gray-500 font-bold uppercase block mb-1">Campus</span>
-                          <span className="font-bold text-gray-900 text-xs">{selectedRequest.campus}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">Leave Details</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2 md:col-span-1 bg-white/50 p-3 rounded-xl border border-white/60">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Calendar className="w-3.5 h-3.5 text-[#CD0000]" />
-                            <span className="text-[10px] font-bold text-gray-500 uppercase">Departure</span>
-                          </div>
-                          <span className="font-bold text-gray-900 text-sm">{selectedRequest.departure}</span>
-                        </div>
-                        <div className="col-span-2 md:col-span-1 bg-white/50 p-3 rounded-xl border border-white/60">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Clock3 className="w-3.5 h-3.5 text-[#CD0000]" />
-                            <span className="text-[10px] font-bold text-gray-500 uppercase">Return Time</span>
-                          </div>
-                          <span className="font-bold text-gray-900 text-sm">{selectedRequest.returnTime}</span>
-                        </div>
-                        <div className="col-span-2 bg-white/50 p-3 rounded-xl border border-white/60">
-                          <div className="flex items-center gap-2 mb-1">
-                            <MapPin className="w-3.5 h-3.5 text-[#CD0000]" />
-                            <span className="text-[10px] font-bold text-gray-500 uppercase">Destination</span>
-                          </div>
-                          <span className="font-bold text-gray-900 text-sm">{selectedRequest.destination}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Reason */}
-                  <div className="mb-6 bg-white/50 p-5 rounded-2xl border border-white/60 flex flex-col gap-2 relative overflow-hidden">
-                    {selectedRequest.isEmergency && (
-                      <div className="absolute top-0 right-0 bg-red-500 text-white text-[10px] uppercase font-bold px-3 py-1 rounded-bl-xl">Emergency</div>
-                    )}
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest">Stated Reason</h3>
-                    <h4 className="font-bold text-gray-900 text-lg">{selectedRequest.reasonTitle}</h4>
-                    <p className="text-gray-700 font-medium leading-relaxed text-sm">{selectedRequest.reasonDescription}</p>
-                    {selectedRequest.hasAttachment && (
-                      <div className="mt-2 flex items-center gap-2 text-blue-600 bg-blue-50 w-max px-3 py-1.5 rounded-lg text-sm font-bold border border-blue-200 cursor-pointer hover:bg-blue-100 transition-colors">
-                        <Paperclip className="w-4 h-4" /> View Attachment
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Section 3: History */}
-                  <div className="mb-8">
-                     <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Prior Approval History</h3>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                       {selectedRequest.approvalFlow.filter(step => step.role !== 'HOD').map((step, idx) => (
-                         <div key={idx} className="bg-white/60 border border-white p-4 rounded-xl shadow-sm">
-                           <div className="flex justify-between items-start mb-2">
-                             <div>
-                               <p className="font-black text-gray-900">{step.role}</p>
-                               <p className="text-xs text-gray-500 font-semibold">{step.approverName}</p>
-                             </div>
-                             {getStatusBadge(step.status)}
-                           </div>
-                           <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded border border-gray-100 italic">
-                             {step.remarks || "No remarks provided."}
-                           </p>
-                         </div>
-                       ))}
-                     </div>
-                  </div>
-
-                  {/* Section 4: Actions */}
-                  <div className="border-t border-white/50 pt-6">
-                    <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">HOD Final Approval</h3>
-                    <textarea 
-                      rows={2} 
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                      placeholder="Add official remarks..."
-                      className="w-full p-4 mb-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"
-                    ></textarea>
-                    
-                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                      <Button className="w-full sm:flex-1 bg-green-600 hover:bg-green-700 text-white py-6 rounded-xl font-bold shadow-md shadow-green-600/20 text-md gap-2 transform active:scale-95 transition-transform">
-                        <CheckCircle className="w-5 h-5" /> Approve Forward to Warden
-                      </Button>
-                      <Button className="w-full sm:flex-1 bg-red-600 hover:bg-red-700 text-white py-6 rounded-xl font-bold shadow-md shadow-red-600/20 text-md gap-2 transform active:scale-95 transition-transform" variant="destructive">
-                        <XCircle className="w-5 h-5" /> Reject Request
-                      </Button>
-                    </div>
-                  </div>
-
-                </div>
-              ) : (
-                <div className="bg-white/40 backdrop-blur-2xl rounded-3xl shadow-xl border border-white/60 p-6 flex items-center justify-center h-full min-h-[400px]">
-                   <p className="text-gray-500 font-bold flex items-center gap-2"><Activity className="w-5 h-5" /> Select a request to view details</p>
-                </div>
-              )}
-            </div>
-
-          </div>
-        </div>
+        <div className="p-6 h-[calc(100vh-80px)]">{renderContent()}</div>
       </main>
     </div>
   );

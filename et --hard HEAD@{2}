@@ -1,0 +1,19 @@
+[33m405b8f8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackend-api[m[33m, [m[1;31morigin/backend-api[m[33m)[m HEAD@{0}: rebase (abort): returning to refs/heads/backend-api
+[33mdeff4be[m HEAD@{1}: commit: Staff Dashboard created
+[33mbdee201[m HEAD@{2}: pull origin backend-api --rebase (start): checkout bdee201fe7d79c3cd85390dc74ede41554ad75fc
+[33m405b8f8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackend-api[m[33m, [m[1;31morigin/backend-api[m[33m)[m HEAD@{3}: commit: login error fix
+[33m6bb94e5[m HEAD@{4}: reset: moving to HEAD~1
+[33m484e2bd[m HEAD@{5}: reset: moving to HEAD~1
+[33mbdee201[m HEAD@{6}: reset: moving to bdee201fe7d79c3cd85390dc74ede41554ad75fc
+[33mbdee201[m HEAD@{7}: commit: changes in role
+[33m484e2bd[m HEAD@{8}: commit: Student dashboard in progress
+[33m6bb94e5[m HEAD@{9}: commit: New ui with auth fumctionality
+[33m20635ae[m HEAD@{10}: checkout: moving from backend-api to backend-api
+[33m20635ae[m HEAD@{11}: checkout: moving from main to backend-api
+[33m82f8c50[m[33m ([m[1;32mmain[m[33m)[m HEAD@{12}: checkout: moving from backend-api to main
+[33m20635ae[m HEAD@{13}: checkout: moving from main to backend-api
+[33m82f8c50[m[33m ([m[1;32mmain[m[33m)[m HEAD@{14}: commit: Integrated supabase with basic student functionality
+[33m20635ae[m HEAD@{15}: pull origin backend-api --rebase (finish): returning to refs/heads/main
+[33m20635ae[m HEAD@{16}: pull origin backend-api --rebase (pick): Improved UI/UX - Figma
+[33ma013f69[m HEAD@{17}: pull origin backend-api --rebase (start): checkout a013f69f6795edf3de0be0b3b1cda2ce32b82a2b
+[33ma4772c7[m HEAD@{18}: commit (initial): Improved UI/UX - Figma
