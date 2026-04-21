@@ -37,6 +37,14 @@ import {
   DialogFooter,
 } from '../components/ui/dialog';
 import { Button } from '../components/ui/button';
+import { AvatarDisplay } from '../components/common/AvatarDisplay';
+import { AvatarUpload } from '../components/common/AvatarUpload';
+import { DurationDisplay } from '../components/common/DurationDisplay';
+import { DateTimePickerGroup } from '../components/common/DateTimePickerGroup';
+import { FlagSelector } from '../components/common/FlagSelector';
+import { FileUploadSection, UploadedFile } from '../components/common/FileUploadSection';
+import { RequestDetailsModal } from '../components/common/RequestDetailsModal';
+import { ProgressStep } from '../components/common/ProgressTracker';
 
 type FacultyRole = 'staff' | 'mentor' | 'advisor' | 'hod' | 'principal';
 
@@ -58,21 +66,53 @@ export function StudentDashboard() {
   const [activeTab, setActiveTab] = useState('outing');
 
   // Form State for Outing/Leave Requests
-  const [outingForm, setOutingForm] = useState({
-    departureDateTime: '',
-    returnDateTime: '',
+  const [outingForm, setOutingForm] = useState<{
+    departureDate: Date | undefined;
+    departureTime: string;
+    returnDate: Date | undefined;
+    returnTime: string;
+    destination: string;
+    reason: string;
+  }>({
+    departureDate: undefined,
+    departureTime: '',
+    returnDate: undefined,
+    returnTime: '',
     destination: '',
     reason: '',
   });
-  const [leaveForm, setLeaveForm] = useState({
-    departureDate: '',
-    returnDate: '',
+  const [leaveForm, setLeaveForm] = useState<{
+    departureDate: Date | undefined;
+    departureTime: string;
+    returnDate: Date | undefined;
+    returnTime: string;
+    destination: string;
+    reason: string;
+  }>({
+    departureDate: undefined,
+    departureTime: '',
+    returnDate: undefined,
+    returnTime: '',
     destination: '',
     reason: '',
   });
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [mentorWarning, setMentorWarning] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // Forms local state for Flags and Files
+  const [outingFlags, setOutingFlags] = useState({ emergency: false, medical: false });
+  const [outingDocs, setOutingDocs] = useState<UploadedFile[]>([]);
+
+  const [leaveFlags, setLeaveFlags] = useState({ emergency: false, medical: false });
+  const [leaveDocs, setLeaveDocs] = useState<UploadedFile[]>([]);
+
+  // Request Details Modal State
+  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Profile Picture State
+  const [profilePic, setProfilePic] = useState<string | undefined>(undefined);
 
   // Profile State
   const [profile, setProfile] = useState({
@@ -251,6 +291,49 @@ export function StudentDashboard() {
     navigate('/');
   };
 
+  const handleOpenRequestDetails = (req: any) => {
+    const isLeave = req.type === 'Leave';
+    let steps: ProgressStep[] = [];
+    if (isLeave) {
+      steps = [
+        { label: 'Submitted', status: 'completed' },
+        { label: 'Mentor', status: req.status === 'Pending' ? 'current' : 'completed' },
+        { label: 'Advisor', status: req.status === 'Pending' ? 'pending' : 'completed' },
+        { label: 'HOD', status: req.status === 'Pending' ? 'pending' : 'completed' },
+        { label: 'Warden', status: req.status === 'Pending' ? 'pending' : (req.status === 'Rejected' ? 'rejected' : 'completed') },
+      ];
+    } else {
+      steps = [
+        { label: 'Submitted', status: 'completed' },
+        { label: 'Warden', status: req.status === 'Pending' ? 'current' : (req.status === 'Rejected' ? 'rejected' : 'completed') },
+      ];
+    }
+
+    setSelectedRequest({
+      id: req.id,
+      type: req.type,
+      status: req.status,
+      departureDate: req.date,
+      departureTime: '10:00 AM',
+      returnDate: '2023-11-15',
+      returnTime: '05:00 PM',
+      duration: '4 Days',
+      destination: 'Campus / Hometown',
+      reason: req.reason,
+      description: 'I need to go out for personal reasons. Attached supporting documents if any.',
+      studentInfo: {
+        name: profile.fullName,
+        avatarUrl: profilePic,
+        department: profile.department,
+        roomNumber: profile.roomNumber,
+      },
+      flags: { emergency: req.type === 'Leave' && req.reason.includes('Medical'), medical: req.reason.includes('Medical') },
+      documents: [],
+      progressSteps: steps,
+    });
+    setIsModalOpen(true);
+  };
+
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.email) return;
@@ -341,21 +424,29 @@ export function StudentDashboard() {
       return;
     }
 
-    if (!outingForm.departureDateTime || !outingForm.returnDateTime || !outingForm.destination || !outingForm.reason) {
+    if (!outingForm.departureDate || !outingForm.departureTime || !outingForm.returnDate || !outingForm.returnTime || !outingForm.destination || !outingForm.reason) {
       setFormError('Please fill in all fields');
       return;
     }
 
     setFormSubmitting(true);
     try {
+      const depDate = new Date(outingForm.departureDate);
+      const [depHours, depMins] = outingForm.departureTime.split(':');
+      depDate.setHours(Number(depHours), Number(depMins));
+
+      const retDate = new Date(outingForm.returnDate);
+      const [retHours, retMins] = outingForm.returnTime.split(':');
+      retDate.setHours(Number(retHours), Number(retMins));
+
       const { error } = await supabase
         .from('outing_requests')
         .insert({
           student_email: user.email,
           student_name: profile.fullName,
           mentor_email: profile.mentorEmail,
-          departure_datetime: new Date(outingForm.departureDateTime).toISOString(),
-          return_datetime: new Date(outingForm.returnDateTime).toISOString(),
+          departure_datetime: depDate.toISOString(),
+          return_datetime: retDate.toISOString(),
           destination: outingForm.destination,
           reason: outingForm.reason,
           status: 'pending',
@@ -371,8 +462,10 @@ export function StudentDashboard() {
 
       // Reset form
       setOutingForm({
-        departureDateTime: '',
-        returnDateTime: '',
+        departureDate: undefined,
+        departureTime: '',
+        returnDate: undefined,
+        returnTime: '',
         destination: '',
         reason: '',
       });
@@ -402,21 +495,29 @@ export function StudentDashboard() {
       return;
     }
 
-    if (!leaveForm.departureDate || !leaveForm.returnDate || !leaveForm.destination || !leaveForm.reason) {
+    if (!leaveForm.departureDate || !leaveForm.departureTime || !leaveForm.returnDate || !leaveForm.returnTime || !leaveForm.destination || !leaveForm.reason) {
       setFormError('Please fill in all fields');
       return;
     }
 
     setFormSubmitting(true);
     try {
+      const depDate = new Date(leaveForm.departureDate);
+      const [depHours, depMins] = leaveForm.departureTime.split(':');
+      depDate.setHours(Number(depHours), Number(depMins));
+
+      const retDate = new Date(leaveForm.returnDate);
+      const [retHours, retMins] = leaveForm.returnTime.split(':');
+      retDate.setHours(Number(retHours), Number(retMins));
+
       const { error } = await supabase
         .from('leave_requests')
         .insert({
           student_email: user.email,
           student_name: profile.fullName,
           mentor_email: profile.mentorEmail,
-          departure_date: leaveForm.departureDate,
-          return_date: leaveForm.returnDate,
+          departure_date: depDate.toISOString().split('T')[0],
+          return_date: retDate.toISOString().split('T')[0],
           destination: leaveForm.destination,
           reason: leaveForm.reason,
           status: 'pending',
@@ -432,8 +533,10 @@ export function StudentDashboard() {
 
       // Reset form
       setLeaveForm({
-        departureDate: '',
-        returnDate: '',
+        departureDate: undefined,
+        departureTime: '',
+        returnDate: undefined,
+        returnTime: '',
         destination: '',
         reason: '',
       });
@@ -488,35 +591,31 @@ export function StudentDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {activeTab === 'outing' ? (
                     <>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-gray-900 ml-1">Departure Date & Time</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Calendar className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <input 
-                            type="datetime-local" 
-                            required 
-                            value={outingForm.departureDateTime}
-                            onChange={(e) => setOutingForm({...outingForm, departureDateTime: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
-                          />
-                        </div>
+                      <div className="md:col-span-2">
+                        <DateTimePickerGroup 
+                          labelPrefix="Departure"
+                          date={outingForm.departureDate}
+                          time={outingForm.departureTime}
+                          onDateChange={(val) => setOutingForm({...outingForm, departureDate: val})}
+                          onTimeChange={(val) => setOutingForm({...outingForm, departureTime: val})}
+                        />
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-gray-900 ml-1">Return Date & Time</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Clock className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <input 
-                            type="datetime-local" 
-                            required 
-                            value={outingForm.returnDateTime}
-                            onChange={(e) => setOutingForm({...outingForm, returnDateTime: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
-                          />
-                        </div>
+                      <div className="md:col-span-2">
+                        <DateTimePickerGroup 
+                          labelPrefix="Return"
+                          date={outingForm.returnDate}
+                          time={outingForm.returnTime}
+                          onDateChange={(val) => setOutingForm({...outingForm, returnDate: val})}
+                          onTimeChange={(val) => setOutingForm({...outingForm, returnTime: val})}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <DurationDisplay 
+                          departureDate={outingForm.departureDate} 
+                          departureTime={outingForm.departureTime} 
+                          returnDate={outingForm.returnDate} 
+                          returnTime={outingForm.returnTime} 
+                        />
                       </div>
                       <div className="space-y-1.5 md:col-span-2">
                         <label className="text-sm font-semibold text-gray-900 ml-1">Destination / Address</label>
@@ -538,45 +637,55 @@ export function StudentDashboard() {
                         <label className="text-sm font-semibold text-gray-900 ml-1">Reason</label>
                         <textarea 
                           required 
-                          rows={4} 
-                          placeholder="Detailed reason for outing..."
+                          rows={2} 
+                          placeholder="Short reason for outing..."
                           value={outingForm.reason}
                           onChange={(e) => setOutingForm({...outingForm, reason: e.target.value})}
                           className="w-full p-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"
                         ></textarea>
                       </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Description</label>
+                        <textarea 
+                          rows={4} 
+                          placeholder="Detailed description..."
+                          className="w-full p-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"
+                        ></textarea>
+                      </div>
+                      <div className="md:col-span-2 mt-2">
+                        <FlagSelector flags={outingFlags} onChange={setOutingFlags} />
+                      </div>
+                      <div className="md:col-span-2">
+                        <FileUploadSection files={outingDocs} onChange={setOutingDocs} />
+                      </div>
                     </>
                   ) : (
                     <>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-gray-900 ml-1">Departure Date</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Calendar className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <input 
-                            type="date" 
-                            required 
-                            value={leaveForm.departureDate}
-                            onChange={(e) => setLeaveForm({...leaveForm, departureDate: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
-                          />
-                        </div>
+                      <div className="md:col-span-2">
+                        <DateTimePickerGroup 
+                          labelPrefix="Departure"
+                          date={leaveForm.departureDate}
+                          time={leaveForm.departureTime}
+                          onDateChange={(val) => setLeaveForm({...leaveForm, departureDate: val})}
+                          onTimeChange={(val) => setLeaveForm({...leaveForm, departureTime: val})}
+                        />
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-gray-900 ml-1">Return Date</label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Clock className="h-5 w-5 text-gray-600" />
-                          </div>
-                          <input 
-                            type="date" 
-                            required 
-                            value={leaveForm.returnDate}
-                            onChange={(e) => setLeaveForm({...leaveForm, returnDate: e.target.value})}
-                            className="w-full pl-10 pr-4 py-3 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md" 
-                          />
-                        </div>
+                      <div className="md:col-span-2">
+                        <DateTimePickerGroup 
+                          labelPrefix="Return"
+                          date={leaveForm.returnDate}
+                          time={leaveForm.returnTime}
+                          onDateChange={(val) => setLeaveForm({...leaveForm, returnDate: val})}
+                          onTimeChange={(val) => setLeaveForm({...leaveForm, returnTime: val})}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <DurationDisplay 
+                          departureDate={leaveForm.departureDate} 
+                          departureTime={leaveForm.departureTime} 
+                          returnDate={leaveForm.returnDate} 
+                          returnTime={leaveForm.returnTime} 
+                        />
                       </div>
                       <div className="space-y-1.5 md:col-span-2">
                         <label className="text-sm font-semibold text-gray-900 ml-1">Destination / Address</label>
@@ -598,12 +707,26 @@ export function StudentDashboard() {
                         <label className="text-sm font-semibold text-gray-900 ml-1">Reason</label>
                         <textarea 
                           required 
-                          rows={4} 
-                          placeholder="Detailed reason for leave..."
+                          rows={2} 
+                          placeholder="Short reason for leave..."
                           value={leaveForm.reason}
                           onChange={(e) => setLeaveForm({...leaveForm, reason: e.target.value})}
                           className="w-full p-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"
                         ></textarea>
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-sm font-semibold text-gray-900 ml-1">Description</label>
+                        <textarea 
+                          rows={4} 
+                          placeholder="Detailed description..."
+                          className="w-full p-4 bg-white/70 border border-white/60 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 rounded-xl outline-none transition-all text-gray-900 font-medium shadow-sm backdrop-blur-md resize-none"
+                        ></textarea>
+                      </div>
+                      <div className="md:col-span-2 mt-2">
+                        <FlagSelector flags={leaveFlags} onChange={setLeaveFlags} />
+                      </div>
+                      <div className="md:col-span-2">
+                        <FileUploadSection files={leaveDocs} onChange={setLeaveDocs} />
                       </div>
                     </>
                   )}
@@ -702,14 +825,17 @@ export function StudentDashboard() {
             </div>
             <div className="space-y-4">
               {requests.map((req, i) => (
-                <div key={i} className="bg-white/70 backdrop-blur-md rounded-2xl p-5 border border-white/60 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-bold text-gray-900 text-lg">{req.type}</span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">{req.id}</span>
+                <div key={i} onClick={() => handleOpenRequestDetails(req)} className="bg-white/70 backdrop-blur-md rounded-2xl p-5 border border-white/60 flex flex-col sm:flex-row justify-between sm:items-center gap-4 shadow-sm hover:shadow-md hover:border-[#CD0000]/30 transition-all cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    <AvatarDisplay name={profile.fullName} imageUrl={profilePic} size="md" />
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-gray-900 text-lg">{req.type}</span>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">{req.id}</span>
+                      </div>
+                      <span className="text-gray-800 text-sm font-medium">{req.reason}</span>
+                      <span className="text-gray-500 text-xs mt-1">Submitted on: {req.date}</span>
                     </div>
-                    <span className="text-gray-800 text-sm font-medium">{req.reason}</span>
-                    <span className="text-gray-500 text-xs mt-1">Submitted on: {req.date}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {req.status === 'Approved' || req.status === 'Resolved' ? (
@@ -774,6 +900,13 @@ export function StudentDashboard() {
             </div>
             
             <form onSubmit={handleProfileSave} className="space-y-8">
+              {/* Avatar Upload */}
+              <AvatarUpload 
+                name={profile.fullName} 
+                imageUrl={profilePic} 
+                onImageChange={(file, previewUrl) => setProfilePic(previewUrl)} 
+              />
+
               {/* Read-only Info */}
               <div>
                 <h3 className="text-lg font-bold text-gray-900 border-b border-gray-300 pb-2 mb-4">Personal Details (Read-only)</h3>
@@ -1026,9 +1159,7 @@ export function StudentDashboard() {
               )}
             </button>
             <div className="flex items-center gap-3 bg-white/60 px-4 py-2 rounded-full shadow-sm border border-white/50 cursor-pointer hover:bg-white/80 transition-colors" onClick={() => setActiveTab('profile')}>
-              <div className="w-8 h-8 rounded-full bg-[#CD0000] flex items-center justify-center text-white font-bold">
-                {profile.fullName.charAt(0)}
-              </div>
+              <AvatarDisplay name={profile.fullName} imageUrl={profilePic} size="sm" className="w-8 h-8" />
               <div className="hidden md:block text-sm">
                 <p className="font-bold text-gray-900 leading-tight">{profile.fullName}</p>
                 <p className="text-gray-600 font-medium text-xs leading-tight">Student</p>
@@ -1042,6 +1173,7 @@ export function StudentDashboard() {
           {renderContent()}
         </div>
       </main>
+      <RequestDetailsModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} request={selectedRequest} />
     </div>
   );
 }
