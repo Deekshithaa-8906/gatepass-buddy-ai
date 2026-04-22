@@ -1,21 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  CheckCircle,
-  FileText,
-  GraduationCap,
-  Inbox,
-  LogOut,
-  Mail,
-  MapPin,
-  Plane,
-  User,
-  Users,
-  XCircle,
-} from 'lucide-react';
+import { FileText, GraduationCap, Inbox, LogOut, Mail, User, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/use-toast';
+import { RequestDetailsModal } from '@/components/common/RequestDetailsModal';
+import { ProgressStep } from '@/components/common/ProgressTracker';
 
 type StaffRole = 'mentor' | 'advisor' | 'hod';
 type ApprovalRole = StaffRole | 'warden' | 'principal';
@@ -90,6 +80,13 @@ interface StudentRow {
 
 const APPROVAL_STAGES = ['SUBMITTED', 'MENTOR', 'ADVISOR', 'HOD', 'FINAL'] as const;
 const DEFAULT_APPROVAL_CHAIN: ApprovalRole[] = ['mentor', 'advisor', 'hod', 'warden', 'principal'];
+const APPROVAL_STAGE_LABELS: Record<typeof APPROVAL_STAGES[number], string> = {
+  SUBMITTED: 'Submitted',
+  MENTOR: 'Mentor',
+  ADVISOR: 'Advisor',
+  HOD: 'HOD',
+  FINAL: 'Final',
+};
 
 const titleCase = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
 
@@ -230,45 +227,40 @@ const getStageLabel = (role?: string | null) => {
 
 const RequestItem = ({
   request,
+  student,
   active,
   onSelect,
 }: {
   request: RequestSummary;
+  student?: StudentProfileSnapshot | null;
   active: boolean;
   onSelect: () => void;
 }) => (
-  <div
+  <button
     onClick={onSelect}
-    className={`p-4 rounded-lg cursor-pointer transition-all border ${
-      active ? 'border-[#CD0000] bg-red-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-    }`}
+    className="w-full text-left rounded-xl border border-gray-100 p-5 shadow-sm hover:border-red-200 hover:shadow-md hover:bg-red-50/10 transition-all flex flex-col gap-3"
   >
-    <div className="flex items-start gap-3 mb-2">
-      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-700 flex-shrink-0">
-        {request.studentName
-          .split(' ')
-          .map((n) => n[0])
-          .join('')}
-      </div>
+    <div className="flex items-start justify-between gap-4 w-full">
       <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <h3 className="font-bold text-gray-900 text-sm">{request.studentName}</h3>
-          <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap ${getStatusBadgeClass(request.status)}`}>
-            {request.status.toUpperCase()}
-          </span>
-        </div>
-        <p className="text-xs font-semibold text-gray-700 mb-1">{titleCase(request.requestType)} Request</p>
-        <p className="text-xs text-gray-600 line-clamp-2 mb-2">{request.reason}</p>
-        <p className="text-xs text-gray-500">Submitted: {formatDateTimeLabel(request.createdAt)}</p>
+        <p className="text-[15px] font-bold text-gray-900 truncate">
+          {student?.fullName || request.studentName}
+        </p>
+        <p className="text-xs font-semibold text-gray-500 mt-0.5 truncate">
+          {student?.department || '-'} • Room {student?.roomNumber || '-'}
+        </p>
       </div>
-    </div>
-    <div className="flex items-center justify-between">
-      <span className="text-xs font-semibold text-[#CD0000] bg-red-50 border border-red-100 rounded-lg px-2 py-1">
-        {request.requestLabel}
+      <span className={`flex-shrink-0 text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full border font-bold ${getStatusBadgeClass(request.status)}`}>
+        {request.status}
       </span>
-      <span className="text-xs text-gray-500">{titleCase(request.requestType)}</span>
     </div>
-  </div>
+    
+    <div className="w-full h-px bg-gray-100 my-1" />
+    
+    <div className="flex items-center justify-between text-xs font-medium text-gray-500 w-full">
+      <span className="bg-gray-50 px-2 py-1 rounded-md border border-gray-100 font-semibold">{titleCase(request.requestType)}</span>
+      <span>{formatDateTimeLabel(request.createdAt)}</span>
+    </div>
+  </button>
 );
 
 const RequestList = ({
@@ -276,26 +268,29 @@ const RequestList = ({
   selectedId,
   title,
   loading,
+  studentDirectory,
   onSelect,
 }: {
   requests: RequestSummary[];
   selectedId: string | null;
   title: string;
   loading: boolean;
+  studentDirectory: Record<string, StudentProfileSnapshot>;
   onSelect: (request: RequestSummary) => void;
 }) => (
-  <div className="lg:w-[30%] bg-white rounded-xl shadow-sm border p-6 overflow-y-auto max-h-[calc(100vh-180px)]">
-    <h2 className="text-lg font-bold text-gray-900 mb-4">{title}</h2>
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 overflow-y-auto max-h-[calc(100vh-140px)]">
+    <h2 className="text-lg font-bold text-gray-900 mb-6">{title}</h2>
     {loading ? (
-      <div className="text-sm text-gray-500">Loading requests...</div>
+      <div className="text-sm font-medium text-gray-500">Loading requests...</div>
     ) : requests.length === 0 ? (
-      <div className="text-sm text-gray-500">No requests pending your review.</div>
+      <div className="text-sm font-medium text-gray-500">No requests pending your review.</div>
     ) : (
-      <div className="space-y-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
         {requests.map((request) => (
           <RequestItem
             key={`${request.requestType}-${request.id}`}
             request={request}
+            student={studentDirectory[request.studentEmail]}
             active={selectedId === request.id}
             onSelect={() => onSelect(request)}
           />
@@ -305,297 +300,6 @@ const RequestList = ({
   </div>
 );
 
-const Timeline = ({
-  currentStage,
-  isRejected,
-}: {
-  currentStage: typeof APPROVAL_STAGES[number];
-  isRejected: boolean;
-}) => (
-  <div className="flex items-center justify-between">
-    {APPROVAL_STAGES.map((stage, index) => {
-      const currentIndex = APPROVAL_STAGES.indexOf(currentStage);
-      const isActive = stage === currentStage;
-      const isComplete = index < currentIndex;
-      const isRejectedStage = isActive && isRejected;
-      const stageClass = isRejectedStage
-        ? 'bg-red-500 text-white'
-        : isActive
-        ? 'bg-[#CD0000] text-white'
-        : isComplete
-        ? 'bg-green-500 text-white'
-        : 'bg-gray-200 text-gray-600';
-
-      return (
-        <React.Fragment key={stage}>
-          <div className="flex flex-col items-center">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${stageClass}`}>
-              {isActive ? (
-                <div className="w-3 h-3 bg-white rounded-full" />
-              ) : isComplete ? (
-                <CheckCircle className="w-5 h-5" />
-              ) : (
-                <div className="w-3 h-3 bg-gray-400 rounded-full" />
-              )}
-            </div>
-            <span className="text-xs font-semibold text-gray-700 mt-2">{stage}</span>
-          </div>
-          {index < APPROVAL_STAGES.length - 1 && (
-            <div className={`flex-1 h-1 mx-2 ${index < currentIndex ? 'bg-green-500' : 'bg-gray-200'}`} />
-          )}
-        </React.Fragment>
-      );
-    })}
-  </div>
-);
-
-const ActionSection = ({
-  status,
-  remarks,
-  onRemarksChange,
-  onApprove,
-  onReject,
-  onReconsider,
-  canAct,
-  actionLoading,
-}: {
-  status: RequestStatus;
-  remarks: string;
-  onRemarksChange: (value: string) => void;
-  onApprove: () => void;
-  onReject: () => void;
-  onReconsider: () => void;
-  canAct: boolean;
-  actionLoading: boolean;
-}) => {
-  if (!canAct) {
-    return (
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-        <p className="text-sm font-semibold text-gray-600">You cannot take action at this stage.</p>
-      </div>
-    );
-  }
-
-  if (status === 'rejected') {
-    return (
-      <div>
-        <button
-          onClick={onReconsider}
-          className="w-full px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
-          disabled={actionLoading}
-        >
-          {actionLoading ? 'Updating...' : 'Review & Approve'}
-        </button>
-      </div>
-    );
-  }
-
-  if (status === 'approved') {
-    return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-        <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-        <p className="text-sm font-bold text-green-800">Request Approved</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Official Remarks & Decision</h3>
-      <textarea
-        value={remarks}
-        onChange={(e) => onRemarksChange(e.target.value)}
-        placeholder="Enter your remarks here..."
-        rows={4}
-        className="w-full p-4 border border-gray-300 rounded-lg outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 text-sm resize-none"
-      />
-      <div className="flex gap-4 mt-4">
-        <button
-          onClick={onReject}
-          className="flex-1 px-6 py-3 bg-white text-[#CD0000] border-2 border-[#CD0000] rounded-lg font-bold transition-all hover:bg-red-50 active:scale-95"
-          disabled={actionLoading}
-        >
-          {actionLoading ? 'Saving...' : 'Reject'}
-        </button>
-        <button
-          onClick={onApprove}
-          className="flex-1 px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
-          disabled={actionLoading}
-        >
-          {actionLoading ? 'Saving...' : 'Approve'}
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const RequestDetails = ({
-  request,
-  student,
-  approvalHistory,
-  remarks,
-  onRemarksChange,
-  onApprove,
-  onReject,
-  onReconsider,
-  canAct,
-  actionLoading,
-}: {
-  request: RequestSummary | null;
-  student: StudentProfileSnapshot | null;
-  approvalHistory: ApprovalEntry[];
-  remarks: string;
-  onRemarksChange: (value: string) => void;
-  onApprove: () => void;
-  onReject: () => void;
-  onReconsider: () => void;
-  canAct: boolean;
-  actionLoading: boolean;
-}) => {
-  if (!request) {
-    return (
-      <div className="flex items-center justify-center h-full text-gray-500">
-        <p className="text-lg font-semibold">Select a request to view details</p>
-      </div>
-    );
-  }
-
-  const departureDate = request.requestType === 'leave' ? formatDate(request.departureDate) : formatDate(request.departureDateTime);
-  const departureTime = request.requestType === 'leave'
-    ? '-'
-    : (hasTimePart(request.departureDateTime) ? formatTime(request.departureDateTime) : '-');
-  const returnDate = request.requestType === 'leave' ? formatDate(request.returnDate) : formatDate(request.returnDateTime);
-  const returnTime = request.requestType === 'leave'
-    ? '-'
-    : (hasTimePart(request.returnDateTime) ? formatTime(request.returnDateTime) : '-');
-  const currentStage = getStageLabel(request.currentApprover);
-  const isRejected = request.status === 'rejected';
-
-  return (
-    <div className="lg:w-[70%] bg-white rounded-xl shadow-sm border p-8 overflow-y-auto max-h-[calc(100vh-180px)]">
-      <div className="space-y-6">
-        <div className="flex items-start justify-between pb-4 border-b">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">{titleCase(request.requestType)} Request</h2>
-            <div className="flex items-center gap-4 text-sm text-gray-600">
-              <span className="font-semibold">Ref ID: {request.id}</span>
-              <span>•</span>
-              <span>Applied {formatDateTimeLabel(request.createdAt)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gray-50 rounded-lg p-5">
-          <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Info</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <label className="text-xs text-gray-500 font-semibold block mb-1">Name</label>
-              <p className="text-sm text-gray-900 font-semibold">{student?.fullName || request.studentName}</p>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 font-semibold block mb-1">Department</label>
-              <p className="text-sm text-gray-900 font-semibold">{student?.department || '-'}</p>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 font-semibold block mb-1">Room/Block</label>
-              <p className="text-sm text-gray-900 font-semibold">{student?.roomNumber || '-'} / {student?.hostelBlock || '-'}</p>
-            </div>
-            <div>
-              <label className="text-xs text-gray-500 font-semibold block mb-1">Campus</label>
-              <p className="text-sm text-gray-900 font-semibold">{student?.institute || '-'}</p>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">{titleCase(request.requestType)} Details</h3>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Plane className="w-4 h-4 text-gray-600" />
-                <label className="text-xs text-gray-600 font-semibold">Departure</label>
-              </div>
-              <p className="text-sm text-gray-900 font-bold">{departureDate}</p>
-              <p className="text-xs text-gray-600">{departureTime}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Plane className="w-4 h-4 text-gray-600 transform rotate-180" />
-                <label className="text-xs text-gray-600 font-semibold">Return</label>
-              </div>
-              <p className="text-sm text-gray-900 font-bold">{returnDate}</p>
-              <p className="text-xs text-gray-600">{returnTime}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <MapPin className="w-4 h-4 text-gray-600" />
-                <label className="text-xs text-gray-600 font-semibold">Destination</label>
-              </div>
-              <p className="text-sm text-gray-900 font-bold">{request.destination}</p>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Reason</h3>
-          <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm text-gray-800 leading-relaxed">{request.reason}</p>
-          </div>
-        </div>
-
-        <div>
-          <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Approval Workflow</h3>
-          <Timeline currentStage={currentStage} isRejected={isRejected} />
-        </div>
-
-        {approvalHistory.length > 0 && (
-          <div>
-            <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Previous Actions</h3>
-            <div className="space-y-2">
-              {approvalHistory
-                .filter((entry) => entry.status === 'approved' || entry.status === 'rejected')
-                .map((entry) => (
-                  <div
-                    key={entry.id}
-                    className={`bg-gray-50 rounded-lg p-4 border-l-4 ${
-                      entry.status === 'approved' ? 'border-green-500' : 'border-red-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-bold text-gray-900">{titleCase(entry.role)}</span>
-                      <span className={`text-xs font-semibold ${entry.status === 'approved' ? 'text-green-600' : 'text-red-600'}`}>
-                        • {titleCase(entry.status)}
-                      </span>
-                    </div>
-                    {entry.reason && <p className="text-sm text-gray-700">{entry.reason}</p>}
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {request.status === 'rejected' && request.rejectionReason && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h3 className="text-sm font-bold text-red-800 mb-2">Rejection Reason</h3>
-            <p className="text-sm text-red-700">{request.rejectionReason}</p>
-          </div>
-        )}
-
-        <ActionSection
-          status={request.status}
-          remarks={remarks}
-          onRemarksChange={onRemarksChange}
-          onApprove={onApprove}
-          onReject={onReject}
-          onReconsider={onReconsider}
-          canAct={canAct}
-          actionLoading={actionLoading}
-        />
-      </div>
-    </div>
-  );
-};
-
 export default function StaffDashboard() {
   const navigate = useNavigate();
   const { profile, loading: authLoading, signOut } = useAuth();
@@ -604,12 +308,14 @@ export default function StaffDashboard() {
   const [selectedRequestSummary, setSelectedRequestSummary] = useState<RequestSummary | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<RequestSummary | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<StudentProfileSnapshot | null>(null);
+  const [studentDirectory, setStudentDirectory] = useState<Record<string, StudentProfileSnapshot>>({});
   const [approvalHistory, setApprovalHistory] = useState<ApprovalEntry[]>([]);
   const [remarks, setRemarks] = useState('');
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const staffRole = normalizeStaffRole(profile?.role);
   const displayName = profile?.full_name || profile?.email || 'Staff';
@@ -749,6 +455,41 @@ export default function StaffDashboard() {
       mobileNumber: data.mobile_number,
       parentMobile: data.parent_mobile,
     } satisfies StudentProfileSnapshot;
+  }, []);
+
+  const loadStudentDirectory = useCallback(async (emails: string[]) => {
+    const uniqueEmails = Array.from(new Set(emails.filter(Boolean)));
+    if (uniqueEmails.length === 0) {
+      setStudentDirectory({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('user_profile_view')
+      .select('id, email, full_name, register_number, department, year_of_study, year, hostel_block, room_number, institute')
+      .in('email', uniqueEmails);
+
+    if (error) {
+      console.error('Unable to load student directory:', error);
+      return;
+    }
+
+    const directory: Record<string, StudentProfileSnapshot> = {};
+    (data || []).forEach((row: any) => {
+      if (!row?.email) return;
+      directory[row.email] = {
+        id: row.id,
+        fullName: row.full_name || row.email,
+        registerNumber: row.register_number,
+        department: row.department,
+        yearOfStudy: row.year_of_study || row.year,
+        hostelBlock: row.hostel_block,
+        roomNumber: row.room_number,
+        institute: row.institute,
+      } satisfies StudentProfileSnapshot;
+    });
+
+    setStudentDirectory(directory);
   }, []);
 
   const loadApprovalHistory = useCallback(async (request: RequestSummary) => {
@@ -987,6 +728,10 @@ export default function StaffDashboard() {
   }, [authLoading, loadRequests, navigate, profile, staffRole]);
 
   useEffect(() => {
+    void loadStudentDirectory(requests.map((request) => request.studentEmail));
+  }, [loadStudentDirectory, requests]);
+
+  useEffect(() => {
     if (requests.length === 0) {
       setSelectedRequestSummary(null);
       return;
@@ -1033,29 +778,160 @@ export default function StaffDashboard() {
     selectedRequest && staffRole && selectedRequest.currentApprover === staffRole && selectedRequest.status !== 'approved',
   );
 
+  const buildProgressSteps = (request: RequestSummary): ProgressStep[] => {
+    const currentStage = getStageLabel(request.currentApprover);
+    const currentIndex = APPROVAL_STAGES.indexOf(currentStage);
+    const approvedRoles = new Set(
+      approvalHistory.filter((entry) => entry.status === 'approved').map((entry) => entry.role.toUpperCase()),
+    );
+
+    return APPROVAL_STAGES.map((stage, index) => {
+      let status: ProgressStep['status'] = 'pending';
+
+      if (request.status === 'approved') {
+        status = 'completed';
+      } else if (approvedRoles.has(stage)) {
+        status = 'completed';
+      } else if (request.status === 'rejected' && stage === currentStage) {
+        status = 'rejected';
+      } else if (index < currentIndex) {
+        status = 'completed';
+      } else if (index === currentIndex) {
+        status = 'current';
+      }
+
+      return { label: APPROVAL_STAGE_LABELS[stage], status };
+    });
+  };
+
+  const selectedStudentMeta = selectedRequest
+    ? selectedStudent || studentDirectory[selectedRequest.studentEmail]
+    : null;
+
+  const requestType: 'Leave' | 'Outing' = selectedRequest?.requestType === 'leave' ? 'Leave' : 'Outing';
+  const requestStatus: 'Pending' | 'Approved' | 'Rejected' =
+    selectedRequest?.status === 'approved'
+      ? 'Approved'
+      : selectedRequest?.status === 'rejected'
+      ? 'Rejected'
+      : 'Pending';
+
+  const modalRequest = selectedRequest
+    ? {
+        id: selectedRequest.id,
+        type: requestType,
+        status: requestStatus,
+        departureDate:
+          selectedRequest.requestType === 'leave'
+            ? formatDate(selectedRequest.departureDate)
+            : formatDate(selectedRequest.departureDateTime),
+        departureTime:
+          selectedRequest.requestType === 'leave'
+            ? '-'
+            : hasTimePart(selectedRequest.departureDateTime)
+            ? formatTime(selectedRequest.departureDateTime)
+            : '-',
+        returnDate:
+          selectedRequest.requestType === 'leave'
+            ? formatDate(selectedRequest.returnDate)
+            : formatDate(selectedRequest.returnDateTime),
+        returnTime:
+          selectedRequest.requestType === 'leave'
+            ? '-'
+            : hasTimePart(selectedRequest.returnDateTime)
+            ? formatTime(selectedRequest.returnDateTime)
+            : '-',
+        duration: '-',
+        destination: selectedRequest.destination,
+        reason: selectedRequest.reason,
+        date: formatDate(selectedRequest.createdAt),
+        studentInfo: {
+          name: selectedStudentMeta?.fullName || selectedRequest.studentName,
+          department: selectedStudentMeta?.department || '-',
+          roomNumber: `${selectedStudentMeta?.roomNumber || '-'}${
+            selectedStudentMeta?.hostelBlock ? ` / ${selectedStudentMeta.hostelBlock}` : ''
+          }`,
+          campus: selectedStudentMeta?.institute || '-',
+        },
+        progressSteps: buildProgressSteps(selectedRequest),
+      }
+    : null;
+
+  const renderDecisionContent = () => {
+    if (!selectedRequest) return null;
+
+    if (!canAct) {
+      return (
+        <div className="bg-white/70 border border-white/50 rounded-xl p-4 text-center text-sm font-semibold text-gray-600 shadow-sm">
+          You cannot take action at this stage.
+        </div>
+      );
+    }
+
+    if (selectedRequest.status === 'rejected') {
+      return (
+        <button
+          onClick={handleReconsider}
+          className="w-full bg-[#E50914] text-white py-2.5 rounded-xl font-bold shadow-md hover:bg-[#E50914]/90 text-sm transition-all active:scale-95"
+          disabled={actionLoading}
+        >
+          {actionLoading ? 'Updating...' : 'Review & Approve'}
+        </button>
+      );
+    }
+
+    if (selectedRequest.status === 'approved') {
+      return (
+        <div className="bg-white/70 border border-white/50 rounded-xl p-4 text-center text-sm font-semibold text-green-700 shadow-sm">
+          Request approved.
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col md:flex-row gap-4">
+        <textarea
+          value={remarks}
+          onChange={(event) => setRemarks(event.target.value)}
+          placeholder="Enter your remarks here (Required for Rejection)..."
+          className="flex-1 p-4 bg-white border border-gray-200 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 outline-none rounded-xl resize-none text-sm font-medium shadow-sm transition-all"
+          rows={3}
+        />
+        <div className="flex flex-col gap-3 w-full md:w-40 justify-center">
+          <button
+            onClick={handleApprove}
+            className="w-full bg-[#CD0000] text-white py-3 rounded-xl font-bold shadow-sm hover:bg-[#a80000] transition-colors focus:ring-4 focus:ring-[#CD0000]/20 active:scale-95 text-sm"
+            disabled={actionLoading}
+          >
+            {actionLoading ? 'Saving...' : 'Approve Request'}
+          </button>
+          <button
+            onClick={handleReject}
+            className="w-full bg-white border border-[#CD0000] text-[#CD0000] py-3 rounded-xl font-bold hover:bg-red-50 text-sm transition-colors active:scale-95"
+            disabled={actionLoading}
+          >
+            {actionLoading ? 'Saving...' : 'Reject Request'}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'requests':
         return (
-          <div className="flex flex-col lg:flex-row gap-6 h-full">
+          <div className="h-full">
             <RequestList
               requests={requests}
               selectedId={selectedRequestSummary?.id || null}
               title={`${titleCase(staffRole || 'staff')} Requests`}
               loading={loadingRequests}
-              onSelect={setSelectedRequestSummary}
-            />
-            <RequestDetails
-              request={selectedRequest}
-              student={selectedStudent}
-              approvalHistory={approvalHistory}
-              remarks={remarks}
-              onRemarksChange={setRemarks}
-              onApprove={handleApprove}
-              onReject={handleReject}
-              onReconsider={handleReconsider}
-              canAct={canAct}
-              actionLoading={actionLoading}
+              studentDirectory={studentDirectory}
+              onSelect={(request) => {
+                setSelectedRequestSummary(request);
+                setIsDetailsOpen(true);
+              }}
             />
           </div>
         );
@@ -1064,10 +940,7 @@ export default function StaffDashboard() {
         return (
           <div className="bg-white rounded-xl shadow-sm border p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-                <Inbox className="w-6 h-6 text-[#CD0000]" />
-                Inbox
-              </h2>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Inbox</h2>
               <p className="text-gray-600 mt-1">Notifications and updates regarding requests.</p>
             </div>
             {notifications.length === 0 ? (
@@ -1112,10 +985,7 @@ export default function StaffDashboard() {
         return (
           <div className="bg-white rounded-xl shadow-sm border p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-                <Users className="w-6 h-6 text-[#CD0000]" />
-                My Students
-              </h2>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">My Students</h2>
               <p className="text-gray-600 mt-1">View students under your mentorship.</p>
             </div>
             {students.length === 0 ? (
@@ -1155,10 +1025,7 @@ export default function StaffDashboard() {
         return (
           <div className="bg-white rounded-xl shadow-sm border p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-                <User className="w-6 h-6 text-[#CD0000]" />
-                My Profile
-              </h2>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">My Profile</h2>
               <p className="text-gray-600 mt-1">View and manage your profile information.</p>
             </div>
             <div className="space-y-6">
@@ -1270,15 +1137,6 @@ export default function StaffDashboard() {
             {activeTab === 'students' ? 'My Students' : activeTab}
           </h1>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setActiveTab('inbox')}
-              className="relative p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700"
-            >
-              <Mail className="w-5 h-5" />
-              {unreadNotifications > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-              )}
-            </button>
             <div
               className="flex items-center gap-3 bg-gray-100 px-4 py-2 rounded-full cursor-pointer hover:bg-gray-200 transition-colors"
               onClick={() => setActiveTab('profile')}
@@ -1296,6 +1154,14 @@ export default function StaffDashboard() {
 
         <div className="p-6 h-[calc(100vh-80px)]">{renderContent()}</div>
       </main>
+
+      <RequestDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        request={modalRequest}
+        showDecisionForm
+        decisionContent={renderDecisionContent()}
+      />
     </div>
   );
 }

@@ -1,21 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Check,
-  CheckCircle,
-  FileText,
-  GraduationCap,
-  Inbox,
-  LogOut,
-  Mail,
-  MapPin,
-  Plane,
-  User,
-  XCircle,
-} from 'lucide-react';
+import { FileText, GraduationCap, Inbox, LogOut, Mail, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/components/ui/use-toast';
+import { RequestDetailsModal } from '@/components/common/RequestDetailsModal';
+import { ProgressStep } from '@/components/common/ProgressTracker';
 
 type RequestType = 'leave' | 'outing';
 type RequestStatus = 'pending' | 'approved' | 'rejected';
@@ -179,38 +169,31 @@ const RequestItem = ({
   active: boolean;
   onSelect: () => void;
 }) => (
-  <div
+  <button
     onClick={onSelect}
-    className={`p-4 rounded-lg cursor-pointer transition-all border ${
-      active ? 'border-[#CD0000] bg-red-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-    }`}
+    className="w-full text-left rounded-xl border border-gray-100 p-5 shadow-sm hover:border-red-200 hover:shadow-md hover:bg-red-50/10 transition-all flex flex-col gap-3"
   >
-    <div className="mb-3">
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <h3 className="font-bold text-gray-900 text-sm">{request.studentName}</h3>
-        <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold whitespace-nowrap ${getStatusBadgeClass(request.status)}`}>
-          {request.status.toUpperCase()}
-        </span>
+    <div className="flex items-start justify-between gap-4 w-full">
+      <div className="flex-1 min-w-0">
+        <p className="text-[15px] font-bold text-gray-900 truncate">
+          {student?.fullName || request.studentName}
+        </p>
+        <p className="text-xs font-semibold text-gray-500 mt-0.5 truncate">
+          {student?.department || '-'} • Room {student?.roomNumber || '-'}
+        </p>
       </div>
-      <p className="text-xs text-gray-600 font-medium">
-        {student?.department || '-'} • {student?.yearOfStudy || '-'} Year
-      </p>
+      <span className={`flex-shrink-0 text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full border font-bold ${getStatusBadgeClass(request.status)}`}>
+        {request.status}
+      </span>
     </div>
-
-    <p className="text-xs font-semibold text-gray-700 mb-1">{titleCase(request.requestType)} Request</p>
-    <p className="text-xs text-gray-600 line-clamp-2 mb-3">{request.reason}</p>
-
-    <div className="flex items-center gap-3 mb-2">
-      <div className="flex items-center gap-1 text-xs text-green-600">
-        <Check className="w-3 h-3" /> Mentor
-      </div>
-      <div className="flex items-center gap-1 text-xs text-green-600">
-        <Check className="w-3 h-3" /> Advisor
-      </div>
+    
+    <div className="w-full h-px bg-gray-100 my-1" />
+    
+    <div className="flex items-center justify-between text-xs font-medium text-gray-500 w-full">
+      <span className="bg-gray-50 px-2 py-1 rounded-md border border-gray-100 font-semibold">{titleCase(request.requestType)}</span>
+      <span>{formatDateTimeLabel(request.createdAt)}</span>
     </div>
-
-    <p className="text-xs text-gray-500">Submitted: {formatDateTimeLabel(request.createdAt)}</p>
-  </div>
+  </button>
 );
 
 const RequestList = ({
@@ -226,14 +209,14 @@ const RequestList = ({
   loading: boolean;
   onSelect: (request: RequestSummary) => void;
 }) => (
-  <div className="lg:w-[30%] bg-white rounded-xl shadow-sm border p-6 overflow-y-auto max-h-[calc(100vh-180px)]">
-    <h2 className="text-lg font-bold text-gray-900 mb-4">HOD Approval Queue</h2>
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 overflow-y-auto max-h-[calc(100vh-140px)]">
+    <h2 className="text-lg font-bold text-gray-900 mb-6">HOD Approval Queue</h2>
     {loading ? (
-      <div className="text-sm text-gray-500">Loading requests...</div>
+      <div className="text-sm font-medium text-gray-500">Loading requests...</div>
     ) : requests.length === 0 ? (
-      <div className="text-sm text-gray-500">No requests ready for HOD review.</div>
+      <div className="text-sm font-medium text-gray-500">No requests ready for HOD review.</div>
     ) : (
-      <div className="space-y-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
         {requests.map((request) => (
           <RequestItem
             key={`${request.requestType}-${request.id}`}
@@ -247,133 +230,6 @@ const RequestList = ({
     )}
   </div>
 );
-
-const ApprovalHistory = ({ history }: { history: ApprovalEntry[] }) => (
-  <div className="space-y-3">
-    {history.map((log) => (
-      <div key={log.id} className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2 text-green-700 font-semibold">
-            <CheckCircle className="w-4 h-4" /> {titleCase(log.role)} Approval
-          </div>
-          <span className="text-xs text-gray-500">{formatDateTimeLabel(log.createdAt)}</span>
-        </div>
-        {log.approverName && <p className="text-xs text-gray-600 mb-1">Name: {log.approverName}</p>}
-        <p className="text-xs text-gray-600">Remark: {log.reason || 'No remarks provided.'}</p>
-      </div>
-    ))}
-  </div>
-);
-
-const Timeline = ({
-  currentStage,
-  rejected,
-  approverNames,
-}: {
-  currentStage: typeof TIMELINE_STEPS[number];
-  rejected: boolean;
-  approverNames: Record<string, string | undefined>;
-}) => (
-  <div className="flex items-center justify-between">
-    {TIMELINE_STEPS.map((stage, index) => {
-      const currentIndex = TIMELINE_STEPS.indexOf(currentStage);
-      const isActive = stage === currentStage;
-      const isComplete = index < currentIndex;
-      const stageClass = rejected && stage === 'HOD'
-        ? 'bg-red-500 text-white'
-        : isActive
-        ? 'bg-[#CD0000] text-white'
-        : isComplete
-        ? 'bg-green-500 text-white'
-        : 'bg-gray-200 text-gray-600';
-
-      return (
-        <React.Fragment key={stage}>
-          <div className="flex flex-col items-center">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${stageClass}`}>
-              {isComplete ? <CheckCircle className="w-5 h-5" /> : <div className="w-3 h-3 bg-white/80 rounded-full" />}
-            </div>
-            <span className="text-xs font-semibold text-gray-700 mt-2">{stage}</span>
-            {approverNames[stage] && (
-              <span className="text-[10px] text-gray-500 mt-1">{approverNames[stage]}</span>
-            )}
-          </div>
-          {index < TIMELINE_STEPS.length - 1 && (
-            <div className={`flex-1 h-1 mx-2 ${index < currentIndex ? 'bg-green-500' : 'bg-gray-200'}`} />
-          )}
-        </React.Fragment>
-      );
-    })}
-  </div>
-);
-
-const ActionSection = ({
-  status,
-  remarks,
-  onRemarksChange,
-  onApprove,
-  onReject,
-  onReconsider,
-  actionLoading,
-}: {
-  status: RequestStatus;
-  remarks: string;
-  onRemarksChange: (value: string) => void;
-  onApprove: () => void;
-  onReject: () => void;
-  onReconsider: () => void;
-  actionLoading: boolean;
-}) => {
-  if (status === 'rejected') {
-    return (
-      <button
-        onClick={onReconsider}
-        className="w-full px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
-        disabled={actionLoading}
-      >
-        {actionLoading ? 'Updating...' : 'Review & Approve'}
-      </button>
-    );
-  }
-
-  if (status === 'approved') {
-    return (
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-        <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
-        <p className="text-sm font-bold text-green-800">Request Approved & Forwarded to Warden</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">HOD Decision</h3>
-      <textarea
-        value={remarks}
-        onChange={(e) => onRemarksChange(e.target.value)}
-        placeholder="Enter your remarks here (optional for approval, required for rejection)..."
-        rows={4}
-        className="w-full p-4 border border-gray-300 rounded-lg outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 text-sm resize-none"
-      />
-      <div className="flex gap-4 mt-4">
-        <button
-          onClick={onReject}
-          className="flex-1 px-6 py-3 bg-white text-[#CD0000] border-2 border-[#CD0000] rounded-lg font-bold transition-all hover:bg-red-50 active:scale-95"
-          disabled={actionLoading}
-        >
-          {actionLoading ? 'Saving...' : 'Reject'}
-        </button>
-        <button
-          onClick={onApprove}
-          className="flex-1 px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
-          disabled={actionLoading}
-        >
-          {actionLoading ? 'Saving...' : 'Approve & Forward to Warden'}
-        </button>
-      </div>
-    </div>
-  );
-};
 
 export default function HodDashboard() {
   const navigate = useNavigate();
@@ -389,6 +245,7 @@ export default function HodDashboard() {
   const [loadingRequests, setLoadingRequests] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const displayName = profile?.full_name || profile?.email || 'HOD';
 
@@ -764,154 +621,150 @@ export default function HodDashboard() {
 
   if (authLoading) return null;
 
-  const studentMeta = selectedStudent || (selectedRequest ? studentDirectory[selectedRequest.studentEmail] : null);
-  const history = approvalHistory.filter((entry) => ['mentor', 'advisor'].includes(entry.role));
-  const currentStage = getTimelineStage(selectedRequest?.currentApprover);
-  const approverNames: Record<string, string | undefined> = {
-    SUBMITTED: selectedRequest?.studentName,
-    MENTOR: approvalHistory.find((entry) => entry.role === 'mentor')?.approverName,
-    ADVISOR: approvalHistory.find((entry) => entry.role === 'advisor')?.approverName,
-    HOD: profile?.full_name || profile?.email,
+  const buildProgressSteps = (request: RequestSummary): ProgressStep[] => {
+    const currentStage = getTimelineStage(request.currentApprover);
+    const currentIndex = TIMELINE_STEPS.indexOf(currentStage);
+    const approvedRoles = new Set(
+      approvalHistory.filter((entry) => entry.status === 'approved').map((entry) => entry.role.toUpperCase()),
+    );
+    const labels: Record<typeof TIMELINE_STEPS[number], string> = {
+      SUBMITTED: 'Submitted',
+      MENTOR: 'Mentor',
+      ADVISOR: 'Advisor',
+      HOD: 'HOD',
+      WARDEN: 'Warden',
+    };
+
+    return TIMELINE_STEPS.map((stage, index) => {
+      let status: ProgressStep['status'] = 'pending';
+      if (request.status === 'approved') {
+        status = 'completed';
+      } else if (approvedRoles.has(stage)) {
+        status = 'completed';
+      } else if (request.status === 'rejected' && stage === currentStage) {
+        status = 'rejected';
+      } else if (index < currentIndex) {
+        status = 'completed';
+      } else if (index === currentIndex) {
+        status = 'current';
+      }
+      return { label: labels[stage], status };
+    });
+  };
+
+  const selectedStudentMeta = selectedRequest
+    ? selectedStudent || studentDirectory[selectedRequest.studentEmail]
+    : null;
+
+  const modalRequest = selectedRequest
+    ? {
+        id: selectedRequest.id,
+        type: selectedRequest.requestType === 'leave' ? 'Leave' : 'Outing',
+        status:
+          selectedRequest.status === 'approved'
+            ? 'Approved'
+            : selectedRequest.status === 'rejected'
+            ? 'Rejected'
+            : 'Pending',
+        departureDate:
+          selectedRequest.requestType === 'leave'
+            ? formatDate(selectedRequest.departureDate)
+            : formatDate(selectedRequest.departureDateTime),
+        departureTime:
+          selectedRequest.requestType === 'leave'
+            ? '-'
+            : formatTime(selectedRequest.departureDateTime),
+        returnDate:
+          selectedRequest.requestType === 'leave'
+            ? formatDate(selectedRequest.returnDate)
+            : formatDate(selectedRequest.returnDateTime),
+        returnTime:
+          selectedRequest.requestType === 'leave'
+            ? '-'
+            : formatTime(selectedRequest.returnDateTime),
+        duration: '-',
+        destination: selectedRequest.destination,
+        reason: selectedRequest.reason,
+        date: formatDate(selectedRequest.createdAt),
+        studentInfo: {
+          name: selectedStudentMeta?.fullName || selectedRequest.studentName,
+          department: selectedStudentMeta?.department || '-',
+          roomNumber: `${selectedStudentMeta?.roomNumber || '-'}${
+            selectedStudentMeta?.hostelBlock ? ` / ${selectedStudentMeta.hostelBlock}` : ''
+          }`,
+          campus: selectedStudentMeta?.institute || '-',
+        },
+        progressSteps: buildProgressSteps(selectedRequest),
+      }
+    : null;
+
+  const renderDecisionContent = () => {
+    if (!selectedRequest) return null;
+
+    if (selectedRequest.status === 'rejected') {
+      return (
+        <button
+          onClick={handleReconsider}
+          className="w-full bg-[#CD0000] text-white py-3 rounded-xl font-bold shadow-sm hover:bg-[#a80000] transition-colors focus:ring-4 focus:ring-[#CD0000]/20 active:scale-95 text-sm"
+          disabled={actionLoading}
+        >
+          {actionLoading ? 'Updating...' : 'Review & Approve'}
+        </button>
+      );
+    }
+
+    if (selectedRequest.status === 'approved') {
+      return (
+        <div className="bg-white border border-gray-100 rounded-xl p-4 text-center text-sm font-semibold text-green-700 shadow-sm">
+          Request approved & forwarded to warden.
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col md:flex-row gap-4">
+        <textarea
+          value={remarks}
+          onChange={(event) => setRemarks(event.target.value)}
+          placeholder="Enter your remarks here (optional for approval, required for rejection)..."
+          className="flex-1 p-4 bg-white border border-gray-200 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 outline-none rounded-xl resize-none text-sm font-medium shadow-sm transition-all"
+          rows={3}
+        />
+        <div className="flex flex-col gap-3 w-full md:w-40 justify-center">
+          <button
+            onClick={handleApprove}
+            className="w-full bg-[#CD0000] text-white py-3 rounded-xl font-bold shadow-sm hover:bg-[#a80000] transition-colors focus:ring-4 focus:ring-[#CD0000]/20 active:scale-95 text-sm"
+            disabled={actionLoading}
+          >
+            {actionLoading ? 'Saving...' : 'Approve & Forward'}
+          </button>
+          <button
+            onClick={handleReject}
+            className="w-full bg-white border border-[#CD0000] text-[#CD0000] py-3 rounded-xl font-bold hover:bg-red-50 text-sm transition-colors active:scale-95"
+            disabled={actionLoading}
+          >
+            {actionLoading ? 'Saving...' : 'Reject Request'}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'requests':
         return (
-          <div className="flex flex-col lg:flex-row gap-6 h-full">
+          <div className="h-full">
             <RequestList
               requests={requests}
               selectedId={selectedRequestSummary?.id || null}
               studentDirectory={studentDirectory}
               loading={loadingRequests}
-              onSelect={setSelectedRequestSummary}
+              onSelect={(request) => {
+                setSelectedRequestSummary(request);
+                setIsDetailsOpen(true);
+              }}
             />
-            <div className="lg:w-[70%] bg-white rounded-xl shadow-sm border p-8 overflow-y-auto max-h-[calc(100vh-180px)]">
-              {selectedRequest ? (
-                <div className="space-y-6">
-                  <div className="flex items-start justify-between pb-4 border-b">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-1">{titleCase(selectedRequest.requestType)} Request</h2>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span className="font-semibold">Ref ID: {selectedRequest.id}</span>
-                        <span>•</span>
-                        <span>Applied {formatDateTimeLabel(selectedRequest.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 rounded-lg p-5">
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Student Information</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Name</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.fullName || selectedRequest.studentName}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Department</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.department || '-'}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Year & Section</label>
-                        <p className="text-sm text-gray-900 font-semibold">
-                          {studentMeta?.yearOfStudy || '-'} Year {studentMeta?.classDetails ? `- ${studentMeta.classDetails}` : ''}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Room/Block</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.roomNumber || '-'} / {studentMeta?.hostelBlock || '-'}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Campus</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.institute || '-'}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Register No</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.registerNumber || '-'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">{titleCase(selectedRequest.requestType)} Details</h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Plane className="w-4 h-4 text-gray-600" />
-                          <label className="text-xs text-gray-600 font-semibold">Departure</label>
-                        </div>
-                        <p className="text-sm text-gray-900 font-bold">
-                          {selectedRequest.requestType === 'leave' ? formatDate(selectedRequest.departureDate) : formatDate(selectedRequest.departureDateTime)}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {selectedRequest.requestType === 'leave' ? '-' : formatTime(selectedRequest.departureDateTime)}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Plane className="w-4 h-4 text-gray-600 transform rotate-180" />
-                          <label className="text-xs text-gray-600 font-semibold">Return</label>
-                        </div>
-                        <p className="text-sm text-gray-900 font-bold">
-                          {selectedRequest.requestType === 'leave' ? formatDate(selectedRequest.returnDate) : formatDate(selectedRequest.returnDateTime)}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {selectedRequest.requestType === 'leave' ? '-' : formatTime(selectedRequest.returnDateTime)}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <MapPin className="w-4 h-4 text-gray-600" />
-                          <label className="text-xs text-gray-600 font-semibold">Destination</label>
-                        </div>
-                        <p className="text-sm text-gray-900 font-bold">{selectedRequest.destination}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Reason</h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-sm text-gray-800 leading-relaxed">{selectedRequest.reason}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Approval History</h3>
-                    {history.length === 0 ? <p className="text-sm text-gray-500">No history yet.</p> : <ApprovalHistory history={history} />}
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Approval Timeline</h3>
-                    <Timeline currentStage={currentStage} rejected={selectedRequest.status === 'rejected'} approverNames={approverNames} />
-                  </div>
-
-                  {selectedRequest.status === 'rejected' && selectedRequest.rejectionReason && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <XCircle className="w-5 h-5 text-red-600" />
-                        <h3 className="text-sm font-bold text-red-800">Rejected by HOD</h3>
-                      </div>
-                      <p className="text-sm text-red-700"><span className="font-semibold">Reason:</span> {selectedRequest.rejectionReason}</p>
-                    </div>
-                  )}
-
-                  <ActionSection
-                    status={selectedRequest.status}
-                    remarks={remarks}
-                    onRemarksChange={setRemarks}
-                    onApprove={handleApprove}
-                    onReject={handleReject}
-                    onReconsider={handleReconsider}
-                    actionLoading={actionLoading}
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  <p className="text-lg font-semibold">Select a request to view details</p>
-                </div>
-              )}
-            </div>
           </div>
         );
 
@@ -919,10 +772,7 @@ export default function HodDashboard() {
         return (
           <div className="bg-white rounded-xl shadow-sm border p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-                <Inbox className="w-6 h-6 text-[#CD0000]" />
-                Inbox
-              </h2>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Inbox</h2>
               <p className="text-gray-600 mt-1">Notifications and updates regarding requests.</p>
             </div>
             {notifications.length === 0 ? (
@@ -952,10 +802,7 @@ export default function HodDashboard() {
         return (
           <div className="bg-white rounded-xl shadow-sm border p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
-                <User className="w-6 h-6 text-[#CD0000]" />
-                My Profile
-              </h2>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">My Profile</h2>
               <p className="text-gray-600 mt-1">View and manage your profile information.</p>
             </div>
             <div className="space-y-6">
@@ -1054,15 +901,6 @@ export default function HodDashboard() {
             {activeTab === 'requests' ? 'HOD Approval Requests' : activeTab}
           </h1>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setActiveTab('inbox')}
-              className="relative p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700"
-            >
-              <Mail className="w-5 h-5" />
-              {unreadNotifications > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-              )}
-            </button>
             <div
               className="flex items-center gap-3 bg-gray-100 px-4 py-2 rounded-full cursor-pointer hover:bg-gray-200 transition-colors"
               onClick={() => setActiveTab('profile')}
@@ -1080,6 +918,14 @@ export default function HodDashboard() {
 
         <div className="p-6 h-[calc(100vh-80px)]">{renderContent()}</div>
       </main>
+
+      <RequestDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        request={modalRequest}
+        showDecisionForm
+        decisionContent={renderDecisionContent()}
+      />
     </div>
   );
 }

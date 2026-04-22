@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, CheckCircle, FileText, LogOut, Mail, User, XCircle } from 'lucide-react';
+import { Bell, CheckCircle, FileText, LogOut, User, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/use-toast';
 
 type ComplaintStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
@@ -89,6 +90,7 @@ const PrincipalDashboard = () => {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [wardenRemark, setWardenRemark] = useState<WardenRemark | null>(null);
   const [closeReason, setCloseReason] = useState('');
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const displayName = profile?.full_name || profile?.email || 'Principal';
 
@@ -374,9 +376,6 @@ const PrincipalDashboard = () => {
             <p className="text-sm font-medium text-gray-600">Complaints overview</p>
           </div>
           <div className="flex items-center gap-4">
-            <button className="relative p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700">
-              <Mail className="w-5 h-5" />
-            </button>
             <div className="flex items-center gap-3 bg-gray-100 px-4 py-2 rounded-full cursor-pointer hover:bg-gray-200 transition-colors">
               <div className="w-8 h-8 rounded-full bg-[#CD0000] flex items-center justify-center text-white font-bold text-sm">
                 {displayName.charAt(0).toUpperCase()}
@@ -391,136 +390,57 @@ const PrincipalDashboard = () => {
 
         <div className="p-6 h-[calc(100vh-80px)]">
           {activeSection === 'complaints' ? (
-            <div className="flex flex-col lg:flex-row gap-6 h-full">
-              <div className="lg:w-[35%] bg-white rounded-xl shadow-sm border p-6 overflow-y-auto max-h-[calc(100vh-220px)]">
-                <div className="mb-4">
-                  <Input
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search by student name, room, department"
-                  />
-                </div>
-                {loadingComplaints ? (
-                  <div className="text-sm text-gray-500">Loading complaints...</div>
-                ) : filteredComplaints.length === 0 ? (
-                  <div className="text-sm text-gray-500">No forwarded complaints found.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredComplaints.map((complaint) => {
-                      const student = complaint.student_id ? studentDirectory[complaint.student_id] : null;
-                      const label = getForwardLabel(complaint.forwarded_by_role);
-                      return (
-                        <button
-                          key={complaint.id}
-                          onClick={() => setSelectedComplaintId(complaint.id)}
-                          className={`w-full text-left p-4 rounded-lg border transition-all ${
-                            selectedComplaintId === complaint.id
-                              ? 'border-[#CD0000] bg-red-50'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-semibold text-gray-900">{student?.full_name || student?.email || 'Student'}</p>
-                              <p className="text-xs text-gray-600 mt-1">{complaint.description.slice(0, 80)}{complaint.description.length > 80 ? '...' : ''}</p>
-                              <p className="text-xs text-gray-500 mt-2">{label}</p>
-                            </div>
-                            <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${getStatusBadgeClass(complaint.status)}`}>
-                              {complaint.status}
-                            </span>
+            <div className="bg-white rounded-xl shadow-sm border p-6">
+              <div className="mb-4">
+                <Input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search by name, room, department"
+                />
+              </div>
+              {loadingComplaints ? (
+                <div className="text-sm text-gray-500">Loading complaints...</div>
+              ) : filteredComplaints.length === 0 ? (
+                <div className="text-sm text-gray-500">No forwarded complaints found.</div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+                  {filteredComplaints.map((complaint) => {
+                    const student = complaint.student_id ? studentDirectory[complaint.student_id] : null;
+                    const label = getForwardLabel(complaint.forwarded_by_role);
+                    return (
+                      <button
+                        key={complaint.id}
+                        onClick={() => {
+                          setSelectedComplaintId(complaint.id);
+                          setIsDetailsOpen(true);
+                        }}
+                        className="w-full text-left rounded-xl border border-gray-100 p-5 shadow-sm hover:border-red-200 hover:shadow-md hover:bg-red-50/10 transition-all flex flex-col gap-3"
+                      >
+                        <div className="flex items-start justify-between gap-4 w-full">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[15px] font-bold text-gray-900 truncate">
+                              {student?.full_name || student?.email || 'Student'}
+                            </p>
+                            <p className="text-xs font-semibold text-gray-500 mt-0.5 truncate">
+                              {student?.department || '-'} • Room {student?.room_number || '-'}
+                            </p>
                           </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 bg-white rounded-xl shadow-sm border p-6 overflow-y-auto">
-                {!selectedComplaint ? (
-                  <div className="text-sm text-gray-500">Select a complaint to view details.</div>
-                ) : (
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h2 className="text-lg font-bold text-gray-900">Complaint Details</h2>
-                        <p className="text-xs text-gray-500">Submitted {formatDateTime(selectedComplaint.created_at)}</p>
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${getStatusBadgeClass(selectedComplaint.status)}`}>
-                        {selectedComplaint.status}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold">Student</p>
-                        <p className="font-semibold text-gray-900">
-                          {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.full_name : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold">Register No</p>
-                        <p className="font-semibold text-gray-900">
-                          {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.register_number || '-' : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold">Room / Block</p>
-                        <p className="font-semibold text-gray-900">
-                          {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.room_number || '-' : '-'} / {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.hostel_block || '-' : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 font-semibold">Department</p>
-                        <p className="font-semibold text-gray-900">
-                          {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.department || '-' : '-'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-gray-500 font-semibold">Complaint</p>
-                      <p className="text-sm text-gray-800 mt-2 whitespace-pre-line">{selectedComplaint.description}</p>
-                    </div>
-
-                    <div className="bg-gray-50 border rounded-lg p-4">
-                      <p className="text-xs text-gray-500 font-semibold">Warden remarks</p>
-                      <p className="text-sm text-gray-800 mt-2">
-                        {wardenRemark ? `${wardenRemark.note} (by ${wardenRemark.author_name})` : 'No remarks recorded.'}
-                      </p>
-                      {wardenRemark && (
-                        <p className="text-xs text-gray-500 mt-2">{formatDateTime(wardenRemark.created_at)}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-3">
-                      <Textarea
-                        value={closeReason}
-                        onChange={(event) => setCloseReason(event.target.value)}
-                        placeholder="Add close reason (required to close)"
-                        className="min-h-[90px]"
-                      />
-                      <div className="flex flex-wrap gap-3">
-                        <Button
-                          onClick={() => handleResolve(selectedComplaint)}
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" /> Resolve
-                        </Button>
-                        <Button
-                          onClick={() => handleClose(selectedComplaint)}
-                          variant="destructive"
-                        >
-                          <XCircle className="w-4 h-4 mr-2" /> Close
-                        </Button>
-                      </div>
-                      {selectedComplaint.closed_reason && (
-                        <p className="text-xs text-gray-500">Closed reason: {selectedComplaint.closed_reason}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+                          <span className={`flex-shrink-0 text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full border font-bold ${getStatusBadgeClass(complaint.status)}`}>
+                            {complaint.status}
+                          </span>
+                        </div>
+                        
+                        <div className="w-full h-px bg-gray-100 my-1" />
+                        
+                        <div className="flex items-center justify-between text-xs font-medium text-gray-500 w-full">
+                          <span className="bg-gray-50 px-2 py-1 rounded-md border border-gray-100 font-semibold">{label}</span>
+                          <span>{formatDateTime(complaint.created_at)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : activeSection === 'inbox' ? (
             <div className="bg-white rounded-xl shadow-sm border p-6">
@@ -586,6 +506,115 @@ const PrincipalDashboard = () => {
           )}
         </div>
       </main>
+
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-w-[700px] w-[95vw] max-h-[90vh] overflow-y-auto p-0 bg-white border border-gray-100 rounded-xl shadow-xl">
+          {!selectedComplaint ? (
+            <div className="p-8"><p className="text-sm text-gray-500">Select a complaint to view details.</p></div>
+          ) : (
+            <div className="p-8 space-y-8 font-body">
+              {/* Header Section */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h2 className="text-3xl font-bold font-display text-gray-900 leading-tight tracking-tight">Complaint Details</h2>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <p className="text-sm font-medium text-gray-500">Ref ID: {selectedComplaint.id}</p>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${getStatusBadgeClass(selectedComplaint.status)}`}>
+                      {selectedComplaint.status}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-sm font-bold text-gray-500 bg-gray-50 px-4 py-2 rounded-lg border border-gray-100">
+                  Submitted On {formatDateTime(selectedComplaint.created_at)}
+                </div>
+              </div>
+
+              {/* Top Card: Student Info */}
+              <div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                  <div>
+                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Student</span>
+                    <span className="block text-sm font-bold text-gray-900">
+                      {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.full_name : '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Register No</span>
+                    <span className="block text-sm font-bold text-gray-900">
+                      {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.register_number || '-' : '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Room / Block</span>
+                    <span className="block text-sm font-bold text-gray-900">
+                      {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.room_number || '-' : '-'} / {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.hostel_block || '-' : '-'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Department</span>
+                    <span className="block text-sm font-bold text-gray-900">
+                      {selectedComplaint.student_id ? studentDirectory[selectedComplaint.student_id]?.department || '-' : '-'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Complaint Description */}
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wide">Complaint Description</h3>
+                <div className="bg-white p-5 text-sm font-medium text-gray-700 leading-relaxed border border-gray-100 rounded-xl shadow-sm whitespace-pre-line">
+                  {selectedComplaint.description}
+                </div>
+              </div>
+
+              {/* Warden Remarks */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 shadow-sm">
+                <h3 className="text-sm font-bold text-blue-900 mb-2 uppercase tracking-wide">WardenRemarks</h3>
+                <p className="text-sm text-blue-800 font-medium">
+                  {wardenRemark ? `${wardenRemark.note} (by ${wardenRemark.author_name})` : 'No remarks recorded.'}
+                </p>
+                {wardenRemark && (
+                  <p className="text-xs text-blue-600/70 font-bold mt-2">{formatDateTime(wardenRemark.created_at)}</p>
+                )}
+              </div>
+
+              {/* Separator */}
+              <div className="h-px w-full bg-gray-100" />
+
+              {/* Actions */}
+              <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+                <h3 className="text-sm font-black text-gray-900 mb-4 uppercase tracking-widest">Resolution & Actions</h3>
+                <div className="flex flex-col md:flex-row gap-4">
+                  <textarea
+                    value={closeReason}
+                    onChange={(event) => setCloseReason(event.target.value)}
+                    placeholder="Add close reason (required to close)..."
+                    className="flex-1 p-4 bg-white border border-gray-200 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 outline-none rounded-xl resize-none text-sm font-medium shadow-sm transition-all"
+                    rows={3}
+                  />
+                  <div className="flex flex-col gap-3 w-full md:w-40 justify-center">
+                    <button
+                      onClick={() => handleResolve(selectedComplaint)}
+                      className="w-full bg-green-600 text-white py-3 rounded-xl font-bold shadow-sm hover:bg-green-700 transition-colors focus:ring-4 focus:ring-green-600/20 active:scale-95 text-sm"
+                    >
+                      <CheckCircle className="w-4 h-4 inline-block mr-1" /> Resolve
+                    </button>
+                    <button
+                      onClick={() => handleClose(selectedComplaint)}
+                      className="w-full bg-white border border-gray-300 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-100 text-sm transition-colors active:scale-95"
+                    >
+                      <XCircle className="w-4 h-4 inline-block mr-1" /> Close
+                    </button>
+                  </div>
+                </div>
+                {selectedComplaint.closed_reason && (
+                  <p className="text-xs text-gray-500 mt-4 font-semibold p-3 bg-white border rounded-lg">Previously logged reason: {selectedComplaint.closed_reason}</p>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

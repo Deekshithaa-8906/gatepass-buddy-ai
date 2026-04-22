@@ -1,23 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Check,
-  CheckCircle,
-  FileText,
-  GraduationCap,
-  Inbox,
-  LogOut,
-  Mail,
-  MapPin,
-  Plane,
-  User,
-  Users,
-  XCircle,
-} from 'lucide-react';
+import { FileText, GraduationCap, Inbox, LogOut, User, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/components/ui/use-toast';
+import { RequestDetailsModal } from '@/components/common/RequestDetailsModal';
+import { ProgressStep } from '@/components/common/ProgressTracker';
 
 type RequestType = 'leave' | 'outing';
 type RequestStatus = 'pending' | 'approved' | 'rejected';
@@ -190,6 +179,7 @@ export function WardenDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const displayName = profile?.full_name || profile?.email || 'Warden';
 
@@ -562,6 +552,7 @@ export function WardenDashboard() {
 
   const handleRequestSelect = (request: RequestSummary) => {
     setSelectedRequest(request);
+    setIsDetailsOpen(true);
   };
 
   const handleBreadcrumbReset = () => {
@@ -570,8 +561,129 @@ export function WardenDashboard() {
     setSelectedRequest(null);
   };
 
-  const studentMeta = selectedRequest ? studentDirectory[selectedRequest.studentEmail] : null;
-  const timelineStage = getTimelineStage(selectedRequest);
+  const buildProgressSteps = (request: RequestSummary): ProgressStep[] => {
+    const currentStage = getTimelineStage(request);
+    const currentIndex = TIMELINE_STEPS.indexOf(currentStage);
+    const approvedRoles = new Set(
+      approvalHistory.filter((entry) => entry.status === 'approved').map((entry) => entry.role.toUpperCase()),
+    );
+    const labels: Record<typeof TIMELINE_STEPS[number], string> = {
+      SUBMITTED: 'Submitted',
+      MENTOR: 'Mentor',
+      ADVISOR: 'Advisor',
+      HOD: 'HOD',
+      WARDEN: 'Warden',
+    };
+
+    return TIMELINE_STEPS.map((stage, index) => {
+      let status: ProgressStep['status'] = 'pending';
+      if (request.status === 'approved') {
+        status = 'completed';
+      } else if (approvedRoles.has(stage)) {
+        status = 'completed';
+      } else if (request.status === 'rejected' && stage === currentStage) {
+        status = 'rejected';
+      } else if (index < currentIndex) {
+        status = 'completed';
+      } else if (index === currentIndex) {
+        status = 'current';
+      }
+      return { label: labels[stage], status };
+    });
+  };
+
+  const selectedStudentMeta = selectedRequest
+    ? studentDirectory[selectedRequest.studentEmail]
+    : null;
+
+  const requestType: 'Leave' | 'Outing' = selectedRequest?.requestType === 'leave' ? 'Leave' : 'Outing';
+  const requestStatus: 'Pending' | 'Approved' | 'Rejected' =
+    selectedRequest?.status === 'approved'
+      ? 'Approved'
+      : selectedRequest?.status === 'rejected'
+      ? 'Rejected'
+      : 'Pending';
+
+  const modalRequest = selectedRequest
+    ? {
+        id: selectedRequest.id,
+        type: requestType,
+        status: requestStatus,
+        departureDate:
+          selectedRequest.requestType === 'leave'
+            ? formatDate(selectedRequest.departureDate)
+            : formatDate(selectedRequest.departureDateTime),
+        departureTime:
+          selectedRequest.requestType === 'leave'
+            ? '-'
+            : formatTime(selectedRequest.departureDateTime),
+        returnDate:
+          selectedRequest.requestType === 'leave'
+            ? formatDate(selectedRequest.returnDate)
+            : formatDate(selectedRequest.returnDateTime),
+        returnTime:
+          selectedRequest.requestType === 'leave'
+            ? '-'
+            : formatTime(selectedRequest.returnDateTime),
+        duration: '-',
+        destination: selectedRequest.destination,
+        reason: selectedRequest.reason,
+        date: formatDate(selectedRequest.createdAt),
+        studentInfo: {
+          name: selectedStudentMeta?.fullName || selectedRequest.studentName,
+          department: selectedStudentMeta?.department || '-',
+          roomNumber: `${selectedStudentMeta?.roomNumber || '-'}${
+            selectedStudentMeta?.hostelBlock ? ` / ${selectedStudentMeta.hostelBlock}` : ''
+          }`,
+          campus: selectedStudentMeta?.institute || '-',
+        },
+        progressSteps: buildProgressSteps(selectedRequest),
+      }
+    : null;
+
+  const renderDecisionContent = () => {
+    if (!selectedRequest) return null;
+
+    if (selectedRequest.status === 'rejected') {
+      return (
+        <button
+          onClick={handleReconsider}
+          className="w-full bg-[#CD0000] text-white py-3 rounded-xl font-bold shadow-sm hover:bg-[#a80000] transition-colors focus:ring-4 focus:ring-[#CD0000]/20 active:scale-95 text-sm"
+          disabled={actionLoading}
+        >
+          {actionLoading ? 'Updating...' : 'Review & Approve'}
+        </button>
+      );
+    }
+
+    return (
+      <div className="flex flex-col md:flex-row gap-4">
+        <textarea
+          value={remarks}
+          onChange={(event) => setRemarks(event.target.value)}
+          placeholder="Enter your remarks here (Required for Rejection)..."
+          className="flex-1 p-4 bg-white border border-gray-200 focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 outline-none rounded-xl resize-none text-sm font-medium shadow-sm transition-all"
+          rows={3}
+        />
+        <div className="flex flex-col gap-3 w-full md:w-40 justify-center">
+          <button
+            onClick={handleApprove}
+            className="w-full bg-[#CD0000] text-white py-3 rounded-xl font-bold shadow-sm hover:bg-[#a80000] transition-colors focus:ring-4 focus:ring-[#CD0000]/20 active:scale-95 text-sm"
+            disabled={actionLoading}
+          >
+            {actionLoading ? 'Saving...' : 'Approve Request'}
+          </button>
+          <button
+            onClick={handleReject}
+            className="w-full bg-white border border-[#CD0000] text-[#CD0000] py-3 rounded-xl font-bold hover:bg-red-50 text-sm transition-colors active:scale-95"
+            disabled={actionLoading}
+          >
+            {actionLoading ? 'Saving...' : 'Reject Request'}
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   if (authLoading) return null;
 
@@ -642,9 +754,6 @@ export function WardenDashboard() {
             <p className="text-sm font-medium text-gray-600">{headerSubtitle}</p>
           </div>
           <div className="flex items-center gap-4">
-            <button className="relative p-2 rounded-full hover:bg-gray-100 transition-colors text-gray-700">
-              <Mail className="w-5 h-5" />
-            </button>
             <div className="flex items-center gap-3 bg-gray-100 px-4 py-2 rounded-full cursor-pointer hover:bg-gray-200 transition-colors">
               <div className="w-8 h-8 rounded-full bg-[#CD0000] flex items-center justify-center text-white font-bold text-sm">
                 {displayName.charAt(0).toUpperCase()}
@@ -664,293 +773,51 @@ export function WardenDashboard() {
                 <Input
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="Search by student name, room number, or register number"
+                  placeholder="Search by name, room, department"
                   className="w-full"
                 />
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-gray-600 mb-6">
-                <button onClick={handleBreadcrumbReset} className="font-semibold hover:text-gray-900">Departments</button>
-                {selectedDepartment && (
-                  <>
-                    <span>/</span>
-                    <button
-                      onClick={() => {
-                        setSelectedStudentEmail(null);
-                        setSelectedRequest(null);
-                      }}
-                      className="font-semibold hover:text-gray-900"
-                    >
-                      {selectedDepartment}
-                    </button>
-                  </>
-                )}
-                {selectedStudentEmail && (
-                  <>
-                    <span>/</span>
-                    <span className="font-semibold text-gray-900">
-                      {studentDirectory[selectedStudentEmail]?.fullName || selectedStudentEmail}
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <div className="flex flex-col lg:flex-row gap-6 h-full">
-            <div className="lg:w-[30%] bg-white rounded-xl shadow-sm border p-6 overflow-y-auto max-h-[calc(100vh-220px)]">
-              {loadingRequests ? (
-                <div className="text-sm text-gray-500">Loading requests...</div>
-              ) : currentLevel === 'departments' ? (
-                <div className="space-y-3">
-                  {departments.map((department) => (
-                    <button
-                      key={department.name}
-                      onClick={() => handleDepartmentSelect(department.name)}
-                      className="w-full text-left rounded-xl border border-gray-200 p-4 shadow-sm hover:border-gray-300 hover:bg-gray-50 transition-all"
-                    >
-                      <p className="font-bold text-gray-900">{department.name}</p>
-                      <p className="text-sm text-gray-600">{department.pendingCount} Requests</p>
-                    </button>
-                  ))}
-                  {departments.length === 0 && <div className="text-sm text-gray-500">No requests found.</div>}
-                </div>
-              ) : currentLevel === 'students' ? (
-                <div className="space-y-3">
-                  {students.map((student) => (
-                    <button
-                      key={student.email}
-                      onClick={() => handleStudentSelect(student.email)}
-                      className="w-full text-left rounded-xl border border-gray-200 p-4 shadow-sm hover:border-gray-300 hover:bg-gray-50 transition-all"
-                    >
-                      <p className="font-bold text-gray-900">{student.profile.fullName}</p>
-                      <p className="text-sm text-gray-600">Room: {student.profile.roomNumber || '-'} • Parent: {student.profile.parentMobile || '-'}</p>
-                      <p className="text-xs text-gray-500 mt-1">{student.requests.length} Requests</p>
-                    </button>
-                  ))}
-                  {students.length === 0 && <div className="text-sm text-gray-500">No students found.</div>}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {studentRequests.map((request) => (
-                    <button
-                      key={request.id}
-                      onClick={() => handleRequestSelect(request)}
-                      className={`w-full text-left rounded-xl border p-4 shadow-sm transition-all ${
-                        selectedRequest?.id === request.id ? 'border-[#CD0000] bg-red-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold uppercase text-gray-500">{titleCase(request.requestType)}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${getStatusBadgeClass(request.status)}`}>
-                          {request.status.toUpperCase()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-900 font-semibold line-clamp-1">{request.reason}</p>
-                      <p className="text-xs text-gray-500 mt-1">{formatDateTimeLabel(request.createdAt)}</p>
-                    </button>
-                  ))}
-                  {studentRequests.length === 0 && <div className="text-sm text-gray-500">No requests for this student.</div>}
-                </div>
-              )}
-            </div>
-
-            <div className="lg:w-[70%] bg-white rounded-xl shadow-sm border p-8 overflow-y-auto max-h-[calc(100vh-220px)]">
-              {!selectedRequest ? (
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  <p className="text-lg font-semibold">
-                    {currentLevel === 'departments'
-                      ? 'Select a department to continue'
-                      : currentLevel === 'students'
-                      ? 'Select a student to view requests'
-                      : 'Select a request to view details'}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="flex items-start justify-between pb-4 border-b">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-1">{titleCase(selectedRequest.requestType)} Request</h2>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
-                        <span className="font-semibold">Ref ID: {selectedRequest.id}</span>
-                        <span>•</span>
-                        <span>Applied {formatDateTimeLabel(selectedRequest.createdAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 rounded-lg p-5">
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Student Information</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Name</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.fullName || selectedRequest.studentName}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Department</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.department || '-'}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Year & Section</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.yearOfStudy || '-'} Year {studentMeta?.classDetails ? `- ${studentMeta.classDetails}` : ''}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Room/Block</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.roomNumber || '-'} / {studentMeta?.hostelBlock || '-'}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Campus</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.institute || '-'}</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-500 font-semibold block mb-1">Register No</label>
-                        <p className="text-sm text-gray-900 font-semibold">{studentMeta?.registerNumber || '-'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">{titleCase(selectedRequest.requestType)} Details</h3>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Plane className="w-4 h-4 text-gray-600" />
-                          <label className="text-xs text-gray-600 font-semibold">Departure</label>
-                        </div>
-                        <p className="text-sm text-gray-900 font-bold">
-                          {selectedRequest.requestType === 'leave' ? formatDate(selectedRequest.departureDate) : formatDate(selectedRequest.departureDateTime)}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {selectedRequest.requestType === 'leave' ? '-' : formatTime(selectedRequest.departureDateTime)}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Plane className="w-4 h-4 text-gray-600 transform rotate-180" />
-                          <label className="text-xs text-gray-600 font-semibold">Return</label>
-                        </div>
-                        <p className="text-sm text-gray-900 font-bold">
-                          {selectedRequest.requestType === 'leave' ? formatDate(selectedRequest.returnDate) : formatDate(selectedRequest.returnDateTime)}
-                        </p>
-                        <p className="text-xs text-gray-600">
-                          {selectedRequest.requestType === 'leave' ? '-' : formatTime(selectedRequest.returnDateTime)}
-                        </p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <MapPin className="w-4 h-4 text-gray-600" />
-                          <label className="text-xs text-gray-600 font-semibold">Destination</label>
-                        </div>
-                        <p className="text-sm text-gray-900 font-bold">{selectedRequest.destination}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Reason</h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <p className="text-sm text-gray-800 leading-relaxed">{selectedRequest.reason}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Approval History</h3>
-                    <div className="space-y-3">
-                      {approvalHistory
-                        .filter((entry) => ['mentor', 'advisor', 'hod'].includes(entry.role))
-                        .map((entry) => (
-                          <div key={entry.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="font-semibold text-gray-900">{titleCase(entry.role)} Approval</p>
-                              <span className="text-xs text-gray-500">{formatDateTimeLabel(entry.createdAt)}</span>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 overflow-y-auto max-h-[calc(100vh-170px)]">
+                {loadingRequests ? (
+                  <div className="text-sm font-medium text-gray-500">Loading requests...</div>
+                ) : filteredRequests.length === 0 ? (
+                  <div className="text-sm font-medium text-gray-500">No requests found.</div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+                    {filteredRequests.map((request) => {
+                      const student = studentDirectory[request.studentEmail];
+                      return (
+                        <button
+                          key={request.id}
+                          onClick={() => handleRequestSelect(request)}
+                          className="w-full text-left rounded-xl border border-gray-100 p-5 shadow-sm hover:border-red-200 hover:shadow-md hover:bg-red-50/10 transition-all flex flex-col gap-3"
+                        >
+                          <div className="flex items-start justify-between gap-4 w-full">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[15px] font-bold text-gray-900 truncate">
+                                {student?.fullName || request.studentName}
+                              </p>
+                              <p className="text-xs font-semibold text-gray-500 mt-0.5 truncate">
+                                {student?.department || '-'} • Room {student?.roomNumber || '-'}
+                              </p>
                             </div>
-                            {entry.approverName && <p className="text-xs text-gray-600 mb-1">Name: {entry.approverName}</p>}
-                            <p className="text-xs text-gray-600">Remark: {entry.reason || 'No remarks provided.'}</p>
+                            <span className={`flex-shrink-0 text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full border font-bold ${getStatusBadgeClass(request.status)}`}>
+                              {request.status}
+                            </span>
                           </div>
-                        ))}
-                      {approvalHistory.length === 0 && <p className="text-sm text-gray-500">No approval history yet.</p>}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Approval Timeline</h3>
-                    <div className="flex items-center justify-between">
-                      {TIMELINE_STEPS.map((stage, index) => {
-                        const currentIndex = TIMELINE_STEPS.indexOf(timelineStage);
-                        const isActive = stage === timelineStage;
-                        const isComplete = index < currentIndex;
-                        const stageClass = selectedRequest.status === 'rejected' && stage === 'WARDEN'
-                          ? 'bg-red-500 text-white'
-                          : isActive
-                          ? 'bg-[#CD0000] text-white'
-                          : isComplete
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-200 text-gray-600';
-
-                        return (
-                          <React.Fragment key={stage}>
-                            <div className="flex flex-col items-center">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${stageClass}`}>
-                                {isComplete ? <CheckCircle className="w-5 h-5" /> : <div className="w-3 h-3 bg-white/80 rounded-full" />}
-                              </div>
-                              <span className="text-xs font-semibold text-gray-700 mt-2">{stage}</span>
-                            </div>
-                            {index < TIMELINE_STEPS.length - 1 && (
-                              <div className={`flex-1 h-1 mx-2 ${index < currentIndex ? 'bg-green-500' : 'bg-gray-200'}`} />
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {selectedRequest.status === 'rejected' && selectedRequest.rejectionReason && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <XCircle className="w-5 h-5 text-red-600" />
-                        <h3 className="text-sm font-bold text-red-800">Rejected by Warden</h3>
-                      </div>
-                      <p className="text-sm text-red-700"><span className="font-semibold">Reason:</span> {selectedRequest.rejectionReason}</p>
-                    </div>
-                  )}
-
-                  {selectedRequest.status === 'rejected' ? (
-                    <button
-                      onClick={handleReconsider}
-                      className="w-full px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
-                      disabled={actionLoading}
-                    >
-                      {actionLoading ? 'Updating...' : 'Review & Approve'}
-                    </button>
-                  ) : (
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-700 uppercase mb-3">Final Decision</h3>
-                      <textarea
-                        value={remarks}
-                        onChange={(e) => setRemarks(e.target.value)}
-                        placeholder="Enter final remarks..."
-                        rows={3}
-                        className="w-full p-4 border border-gray-300 rounded-lg outline-none focus:border-[#CD0000] focus:ring-2 focus:ring-[#CD0000]/20 text-sm resize-none"
-                      />
-                      <div className="flex gap-4 mt-4">
-                        <button
-                          onClick={handleReject}
-                          className="flex-1 px-6 py-3 bg-white text-[#CD0000] border-2 border-[#CD0000] rounded-lg font-bold transition-all hover:bg-red-50 active:scale-95"
-                          disabled={actionLoading}
-                        >
-                          {actionLoading ? 'Saving...' : 'Reject'}
+                          
+                          <div className="w-full h-px bg-gray-100 my-1" />
+                          
+                          <div className="flex items-center justify-between text-xs font-medium text-gray-500 w-full">
+                            <span className="bg-gray-50 px-2 py-1 rounded-md border border-gray-100 font-semibold">{titleCase(request.requestType)}</span>
+                            <span>{formatDateTimeLabel(request.createdAt)}</span>
+                          </div>
                         </button>
-                        <button
-                          onClick={handleApprove}
-                          className="flex-1 px-6 py-3 bg-[#CD0000] text-white rounded-lg font-bold transition-all hover:bg-[#a80000] active:scale-95 shadow-md"
-                          disabled={actionLoading}
-                        >
-                          {actionLoading ? 'Saving...' : 'Approve'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </>
           ) : activeSection === 'inbox' ? (
@@ -1017,6 +884,14 @@ export function WardenDashboard() {
           )}
         </div>
       </main>
+
+      <RequestDetailsModal
+        isOpen={isDetailsOpen}
+        onClose={() => setIsDetailsOpen(false)}
+        request={modalRequest}
+        showDecisionForm
+        decisionContent={renderDecisionContent()}
+      />
     </div>
   );
 }
