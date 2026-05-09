@@ -87,9 +87,9 @@ export function Login() {
       return;
     }
 
-    if (!directoryUser.onboarding_complete && directoryUser.role === 'student') {
+    if (!directoryUser.onboarding_complete) {
       setLoading(false);
-      navigate('/student-onboarding');
+      navigate('/onboarding');
       return;
     }
 

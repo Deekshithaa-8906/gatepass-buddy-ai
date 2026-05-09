@@ -42,15 +42,19 @@ export function CreatePassword() {
   }
   const strengthPercent = Math.max(10, (checksPassed / 5) * 100);
 
-  // If already created, send to onboarding
+  // If already created, send to onboarding or dashboard
   useEffect(() => {
     if (profile?.password_created) {
-      if (profile.role === 'student' && !profile.onboarding_complete) {
-        navigate('/student-onboarding');
+      if (!profile.onboarding_complete) {
+        navigate('/onboarding');
       } else if (profile.role === 'staff' || profile.role === 'mentor' || profile.role === 'hod' || profile.role === 'advisor') {
         navigate('/staff-dashboard');
       } else if (profile.role === 'principal') {
         navigate('/principal-dashboard');
+      } else if (profile.role === 'warden') {
+        navigate('/warden-dashboard');
+      } else if (profile.role === 'admin') {
+        navigate('/admin');
       } else {
         navigate('/student-dashboard');
       }
@@ -58,10 +62,7 @@ export function CreatePassword() {
   }, [profile, navigate]);
 
   const routeByRole = (value: string) => {
-    if (value === 'admin') return '/admin';
-    if (value === 'principal') return '/principal-dashboard';
-    if (value === 'staff' || value === 'mentor' || value === 'hod' || value === 'advisor' || value === 'warden') return '/staff-dashboard';
-    return '/student-onboarding';
+    return '/onboarding'; // They just created their password, so they must complete onboarding next.
   };
 
   const handleCreate = async (e: React.FormEvent) => {
