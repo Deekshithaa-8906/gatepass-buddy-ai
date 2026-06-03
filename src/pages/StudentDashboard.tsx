@@ -60,6 +60,8 @@ type FacultyOption = {
   access_status?: string | null;
 };
 
+const PROFILE_IMAGE_BUCKET = 'profile-images';
+
 export function StudentDashboard() {
   const navigate = useNavigate();
   const { user, profile: accountProfile, refreshProfile } = useAuth();
@@ -113,6 +115,7 @@ export function StudentDashboard() {
 
   // Profile Picture State
   const [profilePic, setProfilePic] = useState<string | undefined>(undefined);
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
 
   // Profile State
   const [profile, setProfile] = useState({
@@ -179,6 +182,9 @@ export function StudentDashboard() {
       principalId: accountProfile.principal_id || current.principalId,
       principalEmail: accountProfile.principal_email || current.principalEmail,
     }));
+    if (accountProfile.profile_image_url) {
+      setProfilePic(accountProfile.profile_image_url);
+    }
   }, [accountProfile]);
 
   useEffect(() => {
@@ -194,7 +200,7 @@ export function StudentDashboard() {
       const { data, error } = await supabase
         .from('user_profile_view')
         .select('id, full_name, email, role, institute, department, staff_department, hod_department, access_status')
-        .in('role', ['mentor', 'advisor', 'hod', 'principal'])
+        .in('role', ['staff', 'mentor', 'advisor', 'hod', 'principal'])
         .eq('institute', institute)
         .in('access_status', ['approved', 'active'])
         .order('full_name', { ascending: true });
@@ -209,9 +215,12 @@ export function StudentDashboard() {
       const rows = (data || []) as FacultyOption[];
 
       const getRowDepartment = (row: FacultyOption) => (row.department || row.staff_department || row.hod_department || '').trim().toLowerCase();
-      const isDeptMatch = (row: FacultyOption) => getRowDepartment(row) === department.toLowerCase();
+      const isDeptMatch = (row: FacultyOption) => {
+        const rowDepartment = getRowDepartment(row);
+        return !rowDepartment || rowDepartment === department.toLowerCase();
+      };
 
-      const staffRows = rows.filter((row) => ['mentor', 'advisor'].includes(row.role) && isDeptMatch(row));
+      const staffRows = rows.filter((row) => ['staff', 'mentor', 'advisor'].includes(row.role) && isDeptMatch(row));
       const mentors = staffRows;
       const advisors = staffRows;
       const hods = rows.filter((row) => row.role === 'hod' && isDeptMatch(row));
@@ -364,6 +373,27 @@ export function StudentDashboard() {
       return;
     }
 
+    let profileImageUrl = accountProfile?.profile_image_url || profilePic || '';
+    if (profileImageFile) {
+      const avatarPath = `${user.id}/avatar`;
+      const { error: uploadError } = await supabase.storage
+        .from(PROFILE_IMAGE_BUCKET)
+        .upload(avatarPath, profileImageFile, {
+          upsert: true,
+          contentType: profileImageFile.type,
+        });
+
+      if (uploadError) {
+        console.error('Error uploading profile image:', uploadError);
+        alert('Unable to upload profile picture. Please try again.');
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(PROFILE_IMAGE_BUCKET).getPublicUrl(avatarPath);
+      profileImageUrl = publicUrlData.publicUrl;
+      setProfilePic(profileImageUrl);
+    }
+
     const { error: detailsError } = await supabase
       .from('students_details')
       .upsert({
@@ -396,6 +426,7 @@ export function StudentDashboard() {
       .from('user_directory')
       .update({
         onboarding_complete: true,
+        profile_image_url: profileImageUrl || null,
         updated_at: new Date().toISOString(),
       })
       .eq('email', user.email);
@@ -405,6 +436,7 @@ export function StudentDashboard() {
       return;
     }
 
+    setProfileImageFile(null);
     await refreshProfile();
     alert('Profile changes saved successfully!');
   };
@@ -904,7 +936,10 @@ export function StudentDashboard() {
               <AvatarUpload 
                 name={profile.fullName} 
                 imageUrl={profilePic} 
-                onImageChange={(file, previewUrl) => setProfilePic(previewUrl)} 
+                onImageChange={(file, previewUrl) => {
+                  setProfileImageFile(file);
+                  setProfilePic(previewUrl);
+                }} 
               />
 
               {/* Read-only Info */}

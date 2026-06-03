@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { User, Phone, Building2, GraduationCap, Lock, ShieldCheck, ChevronDown, Info } from 'lucide-react';
 import { AvatarUpload } from '../common/AvatarUpload';
 import { useAuth } from '../../contexts/AuthContext';
+import { completeOnboarding, routeAfterOnboarding } from '../../lib/onboarding';
+import { useNavigate } from 'react-router-dom';
 
 const hodSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
@@ -17,7 +19,8 @@ const hodSchema = z.object({
 type HodFormData = z.infer<typeof hodSchema>;
 
 export function HodForm() {
-  const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile, refreshProfile } = useAuth();
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -34,20 +37,34 @@ export function HodForm() {
   const onSubmit = async (data: HodFormData) => {
     setIsSubmitting(true);
     try {
-      const finalData = {
-        ...data,
-        department: data.department === 'Other' ? data.departmentOther : data.department,
-        role: 'hod',
+      const department = data.department === 'Other' ? data.departmentOther : data.department;
+      const profileRow = {
+        full_name: data.fullName,
+        email: user?.email || '',
+        mobile_number: data.mobileNumber,
+        institute: data.institute,
+        department,
       };
-      
-      console.log('Frontend State - HOD Form:', finalData);
+
+      const { error } = await completeOnboarding({
+        email: user?.email || '',
+        table: 'hod_details',
+        profileRow,
+      });
+
+      if (error) {
+        throw error;
+      }
+
       if (profileImage) {
         console.log('Profile image to upload:', profileImage.name);
       }
-      
-      alert('Onboarding data saved locally (backend connection skipped as requested). Check console for payload.');
+
+      await refreshProfile();
+      navigate(routeAfterOnboarding(profile?.role || 'hod'));
     } catch (err) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Failed to complete onboarding. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

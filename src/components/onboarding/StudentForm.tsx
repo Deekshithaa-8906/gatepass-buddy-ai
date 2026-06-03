@@ -84,7 +84,8 @@ export function StudentForm() {
     }
 
     await refreshProfile();
-    navigate(routeByRole(profile?.role));
+    const normalizedRole = (profile?.role || 'student').toLowerCase();
+    navigate(routeByRole(normalizedRole));
   };
 
   const institutes = [

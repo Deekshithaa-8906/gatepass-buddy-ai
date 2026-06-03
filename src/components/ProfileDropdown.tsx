@@ -22,7 +22,7 @@ const ProfileDropdown = () => {
   const displayEmail = profile?.email || user.email || '-';
   const displayRole = profile?.role || 'user';
   const displayPhone = profile?.mobile_number || '-';
-  const avatarUrl = (user.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined;
+  const avatarUrl = profile?.profile_image_url || (user.user_metadata as Record<string, unknown> | undefined)?.avatar_url as string | undefined;
   const initial = displayName.charAt(0).toUpperCase();
 
   return (

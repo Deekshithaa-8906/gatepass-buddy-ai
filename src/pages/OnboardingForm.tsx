@@ -40,7 +40,7 @@ export function OnboardingForm() {
 
   if (!user || !profile) return null;
 
-  const role = profile.role || 'student';
+  const role = (profile.role || 'student').toLowerCase();
   const roleDisplay = role === 'hod' ? 'HOD' : role.charAt(0).toUpperCase() + role.slice(1);
 
   return (
@@ -75,12 +75,6 @@ export function OnboardingForm() {
           </div>
 
           <div className="p-8 sm:p-12">
-            <div className="p-3 mb-4 bg-yellow-50 text-sm text-gray-800 rounded">
-              <div><strong>Email:</strong> {user?.email ?? '--'}</div>
-              <div><strong>Role:</strong> {profile?.role ?? '--'}</div>
-              <div><strong>OnboardingComplete:</strong> {String(profile?.onboarding_complete ?? false)}</div>
-              <div><strong>Path:</strong> {window.location.pathname}</div>
-            </div>
             {role === 'student' && <StudentForm />}
             {(role === 'mentor' || role === 'advisor' || role === 'staff') && <StaffForm role={role} />}
             {role === 'hod' && <HodForm />}

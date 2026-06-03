@@ -89,7 +89,7 @@ export function Login() {
 
     if (!directoryUser.onboarding_complete) {
       setLoading(false);
-      navigate('/onboarding');
+      navigate('/onboarding/form');
       return;
     }
 

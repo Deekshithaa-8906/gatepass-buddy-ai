@@ -62,7 +62,7 @@ export function CreatePassword() {
   }, [profile, navigate]);
 
   const routeByRole = (_value: string) => {
-    return '/onboarding'; // They just created their password, so they must complete onboarding next.
+    return '/onboarding/form'; // They just created their password, so go directly to onboarding form.
   };
 
   const handleCreate = async (e: React.FormEvent) => {

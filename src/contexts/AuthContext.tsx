@@ -38,6 +38,7 @@ interface Profile {
   advisor_id?: string;
   hod_id?: string;
   principal_id?: string;
+  profile_image_url?: string;
 }
 
 interface AuthContextType {
@@ -84,24 +85,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchProfile = async (userEmail: string) => {
     try {
-      const { data, error } = await supabase
+      const [{ data: profileData, error: profileError }, { data: directoryData, error: directoryError }] = await Promise.all([
+        supabase
         .from('user_profile_view')
-        .select('id, email, full_name, role, status, mobile_number, register_number, class_details, parent_name, parent_number, gender, institute, year, hostel_block, room_number, department, password_created, onboarding_complete, access_status, account_status, mentor_id, advisor_id, hod_id, principal_id, mentor_name, mentor_email, advisor_name, advisor_email, hod_name, hod_email, principal_name, principal_email')
+        .select('id, email, full_name, role, status, mobile_number, register_number, class_details, parent_name, parent_number, gender, institute, year, hostel_block, room_number, department, profile_image_url, password_created, onboarding_complete, access_status, account_status, mentor_id, advisor_id, hod_id, principal_id, mentor_name, mentor_email, advisor_name, advisor_email, hod_name, hod_email, principal_name, principal_email')
         .eq('email', userEmail)
-        .maybeSingle();
+        .maybeSingle(),
+        supabase
+          .from('user_directory')
+          .select('profile_image_url')
+          .eq('email', userEmail)
+          .maybeSingle(),
+      ]);
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-      } else if (data) {
+      if (profileError) {
+        console.error('Error fetching profile:', profileError);
+      } else if (profileData) {
         // Map database columns to profile interface, handling legacy field names
         const mappedProfile: Profile = {
-          ...data,
-          parent_mobile: data.parent_number, // Map new column name to expected interface
-          year_of_study: data.year, // Map new column name to expected interface
-          mentor: data.mentor_name, // Provide legacy field names for backward compatibility
-          advisor: data.advisor_name,
-          hod: data.hod_name,
-          principal: data.principal_name,
+          ...profileData,
+          profile_image_url: directoryData?.profile_image_url || profileData.profile_image_url,
+          parent_mobile: profileData.parent_number, // Map new column name to expected interface
+          year_of_study: profileData.year, // Map new column name to expected interface
+          mentor: profileData.mentor_name, // Provide legacy field names for backward compatibility
+          advisor: profileData.advisor_name,
+          hod: profileData.hod_name,
+          principal: profileData.principal_name,
         };
         setProfile(mappedProfile);
       } else {

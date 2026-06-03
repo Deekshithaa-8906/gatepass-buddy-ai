@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { User, Phone, Building2, Building, Lock, ShieldCheck, ChevronDown, CheckSquare } from 'lucide-react';
 import { AvatarUpload } from '../common/AvatarUpload';
 import { useAuth } from '../../contexts/AuthContext';
+import { completeOnboarding, routeAfterOnboarding } from '../../lib/onboarding';
+import { useNavigate } from 'react-router-dom';
 
 const wardenSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
@@ -16,7 +18,8 @@ const wardenSchema = z.object({
 type WardenFormData = z.infer<typeof wardenSchema>;
 
 export function WardenForm() {
-  const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile, refreshProfile } = useAuth();
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,19 +35,32 @@ export function WardenForm() {
   const onSubmit = async (data: WardenFormData) => {
     setIsSubmitting(true);
     try {
-      const finalData = {
-        ...data,
-        role: 'warden',
+      const profileRow = {
+        full_name: data.fullName,
+        email: user?.email || '',
+        mobile_number: data.mobileNumber,
+        institute: data.institute,
       };
-      
-      console.log('Frontend State - Warden Form:', finalData);
+
+      const { error } = await completeOnboarding({
+        email: user?.email || '',
+        table: 'warden_details',
+        profileRow,
+      });
+
+      if (error) {
+        throw error;
+      }
+
       if (profileImage) {
         console.log('Profile image to upload:', profileImage.name);
       }
-      
-      alert('Onboarding data saved locally (backend connection skipped as requested). Check console for payload.');
+
+      await refreshProfile();
+      navigate(routeAfterOnboarding(profile?.role || 'warden'));
     } catch (err) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Failed to complete onboarding. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

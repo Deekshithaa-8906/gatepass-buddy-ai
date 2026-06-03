@@ -14,23 +14,11 @@ type RequestBody = {
   otp?: string;
 };
 
-const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-
-function buildCorsHeaders(origin: string | null) {
-  const resolvedOrigin = allowedOrigins.length === 0 || (origin && allowedOrigins.includes(origin))
-    ? (origin ?? '*')
-    : 'null';
-
-  return {
-    'Access-Control-Allow-Origin': resolvedOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    Vary: 'Origin',
-  };
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
@@ -43,12 +31,12 @@ const apiHeaders = {
   'Content-Type': 'application/json',
 };
 
-function json(body: Record<string, unknown>, status = 200, origin: string | null = null) {
+function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...buildCorsHeaders(origin),
+      ...corsHeaders,
     },
   });
 }
@@ -104,11 +92,8 @@ function registrationOtpEmail(otp: string, email: string) {
 }
 
 Deno.serve(async (req: Request) => {
-  const origin = req.headers.get('Origin');
-  const corsHeaders = buildCorsHeaders(origin);
-
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -117,12 +102,12 @@ Deno.serve(async (req: Request) => {
     try {
       body = (await req.json()) as RequestBody;
     } catch {
-      return json({ error: 'Invalid JSON body' }, 400, origin);
+      return json({ error: 'Invalid JSON body' }, 400);
     }
     const email = body.email.trim().toLowerCase();
 
     if (!email || !body.action) {
-      return json({ error: 'email and action are required' }, 400, origin);
+      return json({ error: 'email and action are required' }, 400);
     }
 
     if (body.action === 'send') {
@@ -159,12 +144,12 @@ Deno.serve(async (req: Request) => {
         `Your PassNTrack verification code is ${otp}. It expires in 10 minutes.`,
       );
 
-      return json({ ok: true, email }, 200, origin);
+      return json({ ok: true, email }, 200);
     }
 
     if (body.action === 'verify') {
       if (!body.otp) {
-        return json({ error: 'otp is required' }, 400, origin);
+        return json({ error: 'otp is required' }, 400);
       }
 
       const challengeResponse = await fetch(
@@ -186,16 +171,16 @@ Deno.serve(async (req: Request) => {
 
       const challenge = challenges[0];
       if (!challenge) {
-        return json({ error: 'Verification code not found. Please request a new code.' }, 404, origin);
+        return json({ error: 'Verification code not found. Please request a new code.' }, 404);
       }
 
       if (new Date(challenge.expires_at).getTime() < Date.now()) {
-        return json({ error: 'Verification code has expired. Please request a new code.' }, 400, origin);
+        return json({ error: 'Verification code has expired. Please request a new code.' }, 400);
       }
 
       const submittedHash = await sha256(`${body.otp.trim()}:${challenge.otp_salt}`);
       if (submittedHash !== challenge.otp_hash) {
-        return json({ error: 'Invalid verification code.' }, 400, origin);
+        return json({ error: 'Invalid verification code.' }, 400);
       }
 
       const directoryResponse = await fetch(`${supabaseUrl}/rest/v1/user_directory?on_conflict=email`, {
@@ -228,11 +213,11 @@ Deno.serve(async (req: Request) => {
         headers: apiHeaders,
       });
 
-      return json({ ok: true, email, role: challenge.role }, 200, origin);
+      return json({ ok: true, email, role: challenge.role }, 200);
     }
 
-    return json({ error: 'Unsupported action' }, 400, origin);
+    return json({ error: 'Unsupported action' }, 400);
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'Unexpected error' }, 500, origin);
+    return json({ error: error instanceof Error ? error.message : 'Unexpected error' }, 500);
   }
 });

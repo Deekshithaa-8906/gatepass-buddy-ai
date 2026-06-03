@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { User, Phone, Building2, Lock, ShieldCheck, ChevronDown } from 'lucide-react';
 import { AvatarUpload } from '../common/AvatarUpload';
 import { useAuth } from '../../contexts/AuthContext';
+import { completeOnboarding, routeAfterOnboarding } from '../../lib/onboarding';
+import { useNavigate } from 'react-router-dom';
 
 const principalSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
@@ -15,7 +17,8 @@ const principalSchema = z.object({
 type PrincipalFormData = z.infer<typeof principalSchema>;
 
 export function PrincipalForm() {
-  const { user, profile } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile, refreshProfile } = useAuth();
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,19 +33,32 @@ export function PrincipalForm() {
   const onSubmit = async (data: PrincipalFormData) => {
     setIsSubmitting(true);
     try {
-      const finalData = {
-        ...data,
-        role: 'principal',
+      const profileRow = {
+        full_name: data.fullName,
+        email: user?.email || '',
+        mobile_number: data.mobileNumber,
+        institute: data.institute,
       };
-      
-      console.log('Frontend State - Principal Form:', finalData);
+
+      const { error } = await completeOnboarding({
+        email: user?.email || '',
+        table: 'principal_details',
+        profileRow,
+      });
+
+      if (error) {
+        throw error;
+      }
+
       if (profileImage) {
         console.log('Profile image to upload:', profileImage.name);
       }
-      
-      alert('Onboarding data saved locally (backend connection skipped as requested). Check console for payload.');
+
+      await refreshProfile();
+      navigate(routeAfterOnboarding(profile?.role || 'principal'));
     } catch (err) {
       console.error(err);
+      alert(err instanceof Error ? err.message : 'Failed to complete onboarding. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
