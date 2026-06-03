@@ -14,7 +14,8 @@ import { PendingApproval } from "./pages/PendingApproval";
 import { CreatePassword } from "./pages/CreatePassword";
 import ResetPassword from "./pages/ResetPassword";
 import { StudentDashboard } from "./pages/StudentDashboard";
-import { StudentOnboarding } from "./pages/StudentOnboarding";
+import { Onboarding } from "./pages/Onboarding";
+import { OnboardingForm } from "./pages/OnboardingForm";
 import StaffDashboard from "./pages/StaffDashboard";
 import PrincipalDashboard from "./pages/PrincipalDashboard";
 import { WardenDashboard } from "./pages/WardenDashboard";
@@ -51,8 +52,10 @@ const App = () => (
             <Route path="/staff-dashboard" element={<StaffDashboard />} />
             <Route path="/warden-dashboard" element={<WardenDashboard />} />
             <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
-            <Route path="/student-onboarding" element={<StudentOnboarding />} />
-            <Route path="/onboarding/student" element={<StudentOnboarding />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/onboarding/form" element={<OnboardingForm />} />
+            <Route path="/student-onboarding" element={<OnboardingForm />} />
+            <Route path="/onboarding/student" element={<OnboardingForm />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

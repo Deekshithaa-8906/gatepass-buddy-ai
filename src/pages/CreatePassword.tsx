@@ -61,7 +61,7 @@ export function CreatePassword() {
     }
   }, [profile, navigate]);
 
-  const routeByRole = (value: string) => {
+  const routeByRole = (_value: string) => {
     return '/onboarding'; // They just created their password, so they must complete onboarding next.
   };
 
