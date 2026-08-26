@@ -14,6 +14,8 @@ import {
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
+const ADMIN_MAILER_URL = 'https://qckuamhmwlcfrfkuijud.supabase.co/functions/v1/admin-user-mailer';
+
 type DirectoryUser = {
   id?: string;
   email: string;
@@ -209,9 +211,13 @@ function PendingRequestsSection() {
       .eq('email', email);
 
     if (!error) {
-      const invokeResult = await supabase.functions.invoke('admin-user-mailer', {
-        body: { action: 'approved', email },
-      });
+      const invokeResult = await fetch(ADMIN_MAILER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'approved', email, appUrl: window.location.origin }),
+      }).then((res) => res.json());
 
       if (invokeResult.error) {
         alert('Approval saved, but the approval mailer is not configured.');
@@ -238,9 +244,13 @@ function PendingRequestsSection() {
       .eq('email', email);
 
     if (!error) {
-      const invokeResult = await supabase.functions.invoke('admin-user-mailer', {
-        body: { action: 'rejected', email },
-      });
+      const invokeResult = await fetch(ADMIN_MAILER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action: 'rejected', email, appUrl: window.location.origin }),
+      }).then((res) => res.json());
 
       if (invokeResult.error) {
         alert('Rejection saved, but the rejection mailer is not configured.');
@@ -401,9 +411,13 @@ function VerifyAndAddUsersSection() {
     setMessage('');
     setIsError(false);
 
-    const invokeResult = await supabase.functions.invoke('admin-user-mailer', {
-      body: { action: 'resend_create_password', email: targetEmail },
-    });
+    const invokeResult = await fetch(ADMIN_MAILER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+        body: JSON.stringify({ action: 'resend_create_password', email: targetEmail, appUrl: window.location.origin }),
+    }).then((res) => res.json());
 
     if (!invokeResult.error) {
       setMessage(`Create-password email resent to ${targetEmail}.`);
@@ -447,13 +461,18 @@ function VerifyAndAddUsersSection() {
     setMessage('');
     setIsError(false);
 
-    const invokeResult = await supabase.functions.invoke('admin-user-mailer', {
-      body: {
+    const invokeResult = await fetch(ADMIN_MAILER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         action: 'manual_add',
         email: trimmedEmail,
         role,
-      },
-    });
+        appUrl: window.location.origin,
+      }),
+    }).then((res) => res.json());
 
     if (invokeResult.error) {
       setMessage(invokeResult.error.message || 'Unable to add user.');

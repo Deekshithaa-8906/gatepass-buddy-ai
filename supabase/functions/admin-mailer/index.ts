@@ -88,7 +88,6 @@ function rejectionEmail() {
 }
 
 async function createPasswordLink(email: string, type: 'invite' | 'recovery', appUrl: string) {
-  console.log(`[createPasswordLink] Generating ${type} link for email: ${email}`);
   const response = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
     method: 'POST',
     headers: apiHeaders,
@@ -101,24 +100,12 @@ async function createPasswordLink(email: string, type: 'invite' | 'recovery', ap
     }),
   });
 
-  const responseText = await response.text();
-  console.log(`[createPasswordLink] Response Status: ${response.status}`);
-  console.log(`[createPasswordLink] Response Body: ${responseText}`);
-
   if (!response.ok) {
-    throw new Error(`Unable to generate link: ${response.status} ${responseText}`);
+    throw new Error(`Unable to generate link: ${response.status} ${await response.text()}`);
   }
 
-  if (!responseText.trim()) {
-    throw new Error(`Unable to generate link: Received empty response body from Auth API`);
-  }
-
-  try {
-    const payload = JSON.parse(responseText) as { properties?: { action_link?: string }; action_link?: string };
-    return payload.properties?.action_link || payload.action_link || '';
-  } catch (e) {
-    throw new Error(`Unable to parse generate_link response as JSON: ${e.message}. Content: ${responseText}`);
-  }
+  const payload = await response.json() as { properties?: { action_link?: string }; action_link?: string };
+  return payload.properties?.action_link || payload.action_link || '';
 }
 
 // Resend should work for both:
@@ -141,7 +128,6 @@ async function createResendLink(email: string, appUrl: string) {
 }
 
 async function upsertManualUser(body: RequestBody) {
-  console.log(`[upsertManualUser] Upserting user: ${body.email}`);
   const response = await fetch(`${supabaseUrl}/rest/v1/user_directory?on_conflict=email`, {
     method: 'POST',
     headers: {
@@ -161,12 +147,8 @@ async function upsertManualUser(body: RequestBody) {
     }),
   });
 
-  const responseText = await response.text();
-  console.log(`[upsertManualUser] Response Status: ${response.status}`);
-  console.log(`[upsertManualUser] Response Body: ${responseText}`);
-
   if (!response.ok) {
-    throw new Error(`Unable to upsert user: ${response.status} ${responseText}`);
+    throw new Error(`Unable to upsert user: ${response.status} ${await response.text()}`);
   }
 }
 
@@ -175,22 +157,8 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  console.log(`[serve] Incoming request: ${req.method} ${req.url}`);
-
   try {
-    const reqText = await req.text();
-    console.log(`[serve] Request body: ${reqText}`);
-
-    if (!reqText.trim()) {
-      return json({ error: 'Request body is empty' }, 400);
-    }
-
-    let body: RequestBody;
-    try {
-      body = JSON.parse(reqText) as RequestBody;
-    } catch (e) {
-      return json({ error: `Invalid request JSON: ${e.message}` }, 400);
-    }
+    const body = (await req.json()) as RequestBody;
 
     if (!body.email || !body.action) {
       return json({ error: 'email and action are required' }, 400);
@@ -245,7 +213,6 @@ Deno.serve(async (req: Request) => {
 
     return json({ error: 'Unsupported action' }, 400);
   } catch (error) {
-    console.error(`[serve] Critical error:`, error);
     return json({ error: error instanceof Error ? error.message : 'Unexpected error' }, 500);
   }
 });

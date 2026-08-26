@@ -20,6 +20,8 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+import { renderPassNTrackEmail } from '../_shared/email-template.ts';
+
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const resendApiKey = Deno.env.get('RESEND_API_KEY') ?? '';
@@ -77,18 +79,12 @@ async function sendEmail(to: string, subject: string, html: string, text: string
 }
 
 function registrationOtpEmail(otp: string, email: string) {
-  return `
-    <div style="margin:0;padding:0;background:#f4f6fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-      <div style="max-width:640px;margin:0 auto;padding:40px 20px;">
-        <div style="background:#ffffff;border-radius:24px;overflow:hidden;border:1px solid #e5e7eb;box-shadow:0 12px 40px rgba(15,23,42,0.08);padding:32px;">
-          <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;color:#111827;">Verify Your Email</h1>
-          <p style="margin:0 0 24px;font-size:15px;line-height:1.8;color:#374151;">Use the code below to verify <strong>${email}</strong> and continue creating your account.</p>
-          <div style="display:inline-block;background:#cd0000;color:#ffffff;padding:16px 22px;border-radius:14px;font-size:28px;font-weight:700;letter-spacing:0.25em;">${otp}</div>
-          <p style="margin:24px 0 0;font-size:13px;line-height:1.8;color:#6b7280;">This code expires in 10 minutes. If you did not request it, you can ignore this email.</p>
-        </div>
-      </div>
-    </div>
-  `;
+  return renderPassNTrackEmail({
+    title: 'Verify Your Identity',
+    message: `To continue creating your account for ${email}, use the verification code below. This code expires in 10 minutes.`,
+    code: { value: otp },
+    notice: 'If you did not request this code, please ignore this email or contact support if you have concerns about your account security.',
+  });
 }
 
 Deno.serve(async (req: Request) => {

@@ -1,0 +1,5 @@
+[functions.admin-user-mailer]
+verify_jwt = false
+
+[functions.registration-otp]
+verify_jwt = false
