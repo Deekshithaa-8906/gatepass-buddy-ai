@@ -49,3 +49,4 @@ using (
 -- The live user_profile_view already exists in this project. We avoid replacing it here
 -- because older deployments may have additional columns. The app now reads profile_image_url
 -- directly from user_directory, so this migration only needs the storage and policy setup above.
+y
